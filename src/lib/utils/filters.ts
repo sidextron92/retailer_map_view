@@ -23,9 +23,19 @@ export function applyFilters(
       }
     }
 
-    // Active/inactive filter (for soft delete)
-    if (!filters.showActive && retailer.is_active) return false;
-    if (!filters.showInactive && !retailer.is_active) return false;
+    // Buying category filter - case insensitive
+    if (filters.selectedBuyingCategories.length > 0) {
+      if (!retailer.buying_category) {
+        return false;
+      }
+      const categoryLower = retailer.buying_category.toLowerCase();
+      const hasMatch = filters.selectedBuyingCategories.some(
+        (cat) => cat.toLowerCase() === categoryLower
+      );
+      if (!hasMatch) {
+        return false;
+      }
+    }
 
     // Last visit date filter
     if (filters.lastVisitFrom && retailer.last_visit_date) {
@@ -74,7 +84,7 @@ export function getActiveFilterCount(filters: FilterState): number {
   let count = 0;
 
   if (filters.selectedCategories.length > 0) count++;
-  if (!filters.showActive || !filters.showInactive) count++;
+  if (filters.selectedBuyingCategories.length > 0) count++;
   if (filters.lastVisitFrom || filters.lastVisitTo) count++;
   if (filters.nextVisitFrom || filters.nextVisitTo) count++;
   if (filters.searchQuery) count++;

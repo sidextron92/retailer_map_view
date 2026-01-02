@@ -1,10 +1,9 @@
 export interface FilterState {
-  // Retailer status filters (replaces category - links to retailer_categories)
+  // Retailer status filters
   selectedCategories: string[];
 
-  // Active/inactive filters (for soft delete)
-  showActive: boolean;
-  showInactive: boolean;
+  // Buying category filters
+  selectedBuyingCategories: string[];
 
   // Date filters
   lastVisitFrom: Date | null;
@@ -22,8 +21,8 @@ export interface FilterState {
 export interface FilterActions {
   setCategories: (categories: string[]) => void;
   toggleCategory: (category: string) => void;
-  setShowActive: (show: boolean) => void;
-  setShowInactive: (show: boolean) => void;
+  setBuyingCategories: (categories: string[]) => void;
+  toggleBuyingCategory: (category: string) => void;
   setLastVisitRange: (from: Date | null, to: Date | null) => void;
   setNextVisitRange: (from: Date | null, to: Date | null) => void;
   setSearchQuery: (query: string) => void;

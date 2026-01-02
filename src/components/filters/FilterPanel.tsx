@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { useFilterStore } from '@/store/filterStore';
 import { getActiveFilterCount } from '@/lib/utils/filters';
 import { CategoryFilter } from './CategoryFilter';
-import { StatusFilter } from './StatusFilter';
+import { BuyingCategoryFilter } from './BuyingCategoryFilter';
 import { SearchFilter } from './SearchFilter';
 
 interface FilterPanelProps {
@@ -60,11 +60,11 @@ export function FilterPanel({ isOpen, onClose }: FilterPanelProps) {
               {/* Search Filter */}
               <SearchFilter />
 
-              {/* Category Filter */}
+              {/* Retailer Status Filter */}
               <CategoryFilter />
 
-              {/* Status Filters */}
-              <StatusFilter />
+              {/* Buying Category Filter */}
+              <BuyingCategoryFilter />
             </div>
           </div>
 

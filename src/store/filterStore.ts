@@ -3,8 +3,7 @@ import type { FilterStore } from '@/types/filter';
 
 const initialState = {
   selectedCategories: [],
-  showActive: true,
-  showInactive: true,
+  selectedBuyingCategories: [],
   lastVisitFrom: null,
   lastVisitTo: null,
   nextVisitFrom: null,
@@ -25,9 +24,15 @@ export const useFilterStore = create<FilterStore>((set) => ({
         : [...state.selectedCategories, category],
     })),
 
-  setShowActive: (show) => set({ showActive: show }),
+  setBuyingCategories: (categories) =>
+    set({ selectedBuyingCategories: categories }),
 
-  setShowInactive: (show) => set({ showInactive: show }),
+  toggleBuyingCategory: (category) =>
+    set((state) => ({
+      selectedBuyingCategories: state.selectedBuyingCategories.includes(category)
+        ? state.selectedBuyingCategories.filter((c) => c !== category)
+        : [...state.selectedBuyingCategories, category],
+    })),
 
   setLastVisitRange: (from, to) =>
     set({ lastVisitFrom: from, lastVisitTo: to }),
