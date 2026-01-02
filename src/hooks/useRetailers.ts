@@ -15,14 +15,35 @@ export function useRetailers() {
         setLoading(true);
         setError(null);
 
-        const { data, error: fetchError } = await supabase
-          .from('retailers')
-          .select('*')
-          .order('name', { ascending: true });
+        // Fetch all retailers by paginating through results
+        let allRetailers: Retailer[] = [];
+        let from = 0;
+        const pageSize = 1000;
+        let hasMore = true;
 
-        if (fetchError) throw fetchError;
+        while (hasMore) {
+          const { data, error: fetchError } = await supabase
+            .from('retailers')
+            .select('*')
+            .order('name', { ascending: true })
+            .range(from, from + pageSize - 1);
 
-        setRetailers(data || []);
+          if (fetchError) throw fetchError;
+
+          if (data && data.length > 0) {
+            allRetailers = [...allRetailers, ...data];
+            from += pageSize;
+
+            // If we got less than pageSize, we've reached the end
+            if (data.length < pageSize) {
+              hasMore = false;
+            }
+          } else {
+            hasMore = false;
+          }
+        }
+
+        setRetailers(allRetailers);
       } catch (err) {
         console.error('Error fetching retailers:', err);
         setError(err instanceof Error ? err : new Error('Failed to fetch retailers'));
