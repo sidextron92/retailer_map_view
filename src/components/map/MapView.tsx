@@ -251,12 +251,12 @@ export function MapView({ retailers, onMarkerClick }: MapViewProps) {
             latitude={userLocation.latitude}
             anchor="center"
           >
-            <div className="relative h-8 w-8">
+            <div className="relative h-4 w-4">
               {/* Pulsing circle animation - centered */}
-              <div className="absolute left-1/2 top-1/2 h-8 w-8 -translate-x-1/2 -translate-y-1/2 animate-ping rounded-full bg-blue-400 opacity-75"></div>
+              <div className="absolute left-1/2 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 animate-ping rounded-full bg-blue-400 opacity-75"></div>
               {/* Main marker - centered */}
-              <div className="absolute left-1/2 top-1/2 flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-blue-500 shadow-lg ring-4 ring-white">
-                <div className="h-3 w-3 rounded-full bg-white"></div>
+              <div className="absolute left-1/2 top-1/2 flex h-4 w-4 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-blue-500 shadow-lg ring-2 ring-white">
+                <div className="h-1.5 w-1.5 rounded-full bg-white"></div>
               </div>
             </div>
           </Marker>
