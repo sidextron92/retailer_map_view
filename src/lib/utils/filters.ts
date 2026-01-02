@@ -60,21 +60,8 @@ export function applyFilters(
       }
     }
 
-    // URL-based filters (case insensitive)
-    if (filters.darkstoreFilter &&
-        retailer.darkstore?.toLowerCase() !== filters.darkstoreFilter.toLowerCase()) {
-      return false;
-    }
-
-    if (filters.skIdFilter &&
-        retailer.sk_id?.toLowerCase() !== filters.skIdFilter.toLowerCase()) {
-      return false;
-    }
-
-    if (filters.buyingCategoryFilter &&
-        retailer.buying_category?.toLowerCase() !== filters.buyingCategoryFilter.toLowerCase()) {
-      return false;
-    }
+    // Note: URL-based filters (darkstore, sk_id, buying_category) are now applied server-side
+    // in the useRetailers hook for better performance
 
     return true;
   });
@@ -91,9 +78,7 @@ export function getActiveFilterCount(filters: FilterState): number {
   if (filters.lastVisitFrom || filters.lastVisitTo) count++;
   if (filters.nextVisitFrom || filters.nextVisitTo) count++;
   if (filters.searchQuery) count++;
-  if (filters.darkstoreFilter) count++;
-  if (filters.skIdFilter) count++;
-  if (filters.buyingCategoryFilter) count++;
+  // URL filters (darkstore, sk_id, buying_category) are handled server-side
 
   return count;
 }

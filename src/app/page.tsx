@@ -13,28 +13,22 @@ import { Button } from '@/components/ui/button';
 import type { Retailer } from '@/types/retailer';
 
 function HomeContent() {
-  const { retailers, loading, error } = useRetailers();
+  const searchParams = useSearchParams();
+
+  // Read URL parameters for server-side filtering
+  const urlFilters = useMemo(() => ({
+    darkstore: searchParams.get('darkstore'),
+    skId: searchParams.get('sk_id'),
+    buyingCategory: searchParams.get('buying_category'),
+  }), [searchParams]);
+
+  // Fetch retailers with server-side filters applied
+  const { retailers, loading, error } = useRetailers(urlFilters);
+
   const [selectedRetailer, setSelectedRetailer] = useState<Retailer | null>(null);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const filters = useFilterStore();
-  const setUrlFilters = useFilterStore((state) => state.setUrlFilters);
   const activeFilterCount = getActiveFilterCount(filters);
-  const searchParams = useSearchParams();
-
-  // Apply URL-based filters on mount
-  useEffect(() => {
-    const darkstore = searchParams.get('darkstore');
-    const skId = searchParams.get('sk_id');
-    const buyingCategory = searchParams.get('buying_category');
-
-    if (darkstore || skId || buyingCategory) {
-      setUrlFilters({
-        darkstore: darkstore || undefined,
-        skId: skId || undefined,
-        buyingCategory: buyingCategory || undefined,
-      });
-    }
-  }, [searchParams, setUrlFilters]);
 
   // Apply filters to retailers
   const filteredRetailers = useMemo(

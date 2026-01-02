@@ -10,9 +10,6 @@ const initialState = {
   nextVisitFrom: null,
   nextVisitTo: null,
   searchQuery: '',
-  darkstoreFilter: null,
-  skIdFilter: null,
-  buyingCategoryFilter: null,
 };
 
 export const useFilterStore = create<FilterStore>((set) => ({
@@ -39,19 +36,6 @@ export const useFilterStore = create<FilterStore>((set) => ({
     set({ nextVisitFrom: from, nextVisitTo: to }),
 
   setSearchQuery: (query) => set({ searchQuery: query }),
-
-  setDarkstoreFilter: (darkstore) => set({ darkstoreFilter: darkstore }),
-
-  setSkIdFilter: (skId) => set({ skIdFilter: skId }),
-
-  setBuyingCategoryFilter: (category) => set({ buyingCategoryFilter: category }),
-
-  setUrlFilters: (params) =>
-    set({
-      darkstoreFilter: params.darkstore !== undefined ? params.darkstore : null,
-      skIdFilter: params.skId !== undefined ? params.skId : null,
-      buyingCategoryFilter: params.buyingCategory !== undefined ? params.buyingCategory : null,
-    }),
 
   resetFilters: () => set(initialState),
 }));

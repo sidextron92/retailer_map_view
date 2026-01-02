@@ -15,10 +15,8 @@ export interface FilterState {
   // Search filter
   searchQuery: string;
 
-  // URL-based filters
-  darkstoreFilter: string | null;
-  skIdFilter: string | null;
-  buyingCategoryFilter: string | null;
+  // Note: URL-based filters (darkstore, sk_id, buying_category) are now handled
+  // server-side in useRetailers hook for better performance
 }
 
 export interface FilterActions {
@@ -29,10 +27,6 @@ export interface FilterActions {
   setLastVisitRange: (from: Date | null, to: Date | null) => void;
   setNextVisitRange: (from: Date | null, to: Date | null) => void;
   setSearchQuery: (query: string) => void;
-  setDarkstoreFilter: (darkstore: string | null) => void;
-  setSkIdFilter: (skId: string | null) => void;
-  setBuyingCategoryFilter: (category: string | null) => void;
-  setUrlFilters: (params: { darkstore?: string | null; skId?: string | null; buyingCategory?: string | null }) => void;
   resetFilters: () => void;
 }
 
