@@ -117,7 +117,7 @@ function HomeContent() {
       {/* Filter Toggle Button */}
       <Button
         onClick={() => setIsFilterOpen(true)}
-        className="fixed right-4 top-4 z-30 h-12 gap-2 shadow-lg"
+        className="fixed right-4 bottom-4 z-30 h-12 gap-2 shadow-lg"
         size="lg"
       >
         <Filter className="h-5 w-5" />
