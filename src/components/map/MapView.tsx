@@ -12,7 +12,6 @@ import Map, {
 import type { Retailer } from '@/types/retailer';
 import { MAPBOX_TOKEN, DEFAULT_MAP_CONFIG, CLUSTER_CONFIG } from '@/lib/mapbox/config';
 import { getMarkerColor } from '@/lib/utils/markers';
-import { useGeolocation } from '@/hooks/useGeolocation';
 
 interface MapViewProps {
   retailers: Retailer[];
@@ -26,7 +25,7 @@ export function MapView({ retailers, onMarkerClick }: MapViewProps) {
   const [mapLoaded, setMapLoaded] = useState(false);
   const [overlappingRetailers, setOverlappingRetailers] = useState<Retailer[]>([]);
   const [showOverlapDialog, setShowOverlapDialog] = useState(false);
-  const { position: userLocation } = useGeolocation();
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
 
   // Convert retailers to GeoJSON format
   const geojsonData = useMemo(() => {
@@ -242,6 +241,12 @@ export function MapView({ retailers, onMarkerClick }: MapViewProps) {
           position="top-right"
           trackUserLocation
           showUserHeading
+          onGeolocate={(e) => {
+            setUserLocation({
+              latitude: e.coords.latitude,
+              longitude: e.coords.longitude,
+            });
+          }}
         />
 
         {/* Current Location Marker */}
