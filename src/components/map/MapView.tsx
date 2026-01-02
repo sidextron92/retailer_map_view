@@ -221,10 +221,10 @@ export function MapView({ retailers, onMarkerClick }: MapViewProps) {
           const feature = features[0];
 
           // Check if it's a cluster
-          if (feature.properties.cluster || feature.properties.point_count) {
+          if (feature.properties && (feature.properties.cluster || feature.properties.point_count)) {
             e.preventDefault();
             handleClusterClick(e);
-          } else if (feature.layer.id === 'unclustered-point') {
+          } else if (feature.layer && feature.layer.id === 'unclustered-point') {
             handleMarkerClick(e);
           }
         }}
