@@ -27,6 +27,22 @@ export function MapView({ retailers, onMarkerClick }: MapViewProps) {
   const [showOverlapDialog, setShowOverlapDialog] = useState(false);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
 
+  // Convert user location to GeoJSON format
+  const userLocationGeojson = useMemo(() => {
+    if (!userLocation) return null;
+    return {
+      type: 'FeatureCollection' as const,
+      features: [{
+        type: 'Feature' as const,
+        properties: {},
+        geometry: {
+          type: 'Point' as const,
+          coordinates: [userLocation.longitude, userLocation.latitude],
+        },
+      }],
+    };
+  }, [userLocation]);
+
   // Convert retailers to GeoJSON format
   const geojsonData = useMemo(() => {
     return {
@@ -248,22 +264,46 @@ export function MapView({ retailers, onMarkerClick }: MapViewProps) {
           }}
         />
 
-        {/* Current Location Marker */}
-        {userLocation && (
-          <Marker
-            longitude={userLocation.longitude}
-            latitude={userLocation.latitude}
-            anchor="center"
+        {/* Current Location Layer - Rendered first to appear below retailer markers */}
+        {userLocationGeojson && (
+          <Source
+            id="user-location"
+            type="geojson"
+            data={userLocationGeojson}
           >
-            <div className="relative h-6 w-6">
-              {/* Pulsing circle animation - centered and expanded */}
-              <div className="absolute left-1/2 top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2 animate-ping rounded-full bg-blue-400 opacity-75"></div>
-              {/* Main marker - centered */}
-              <div className="absolute left-1/2 top-1/2 flex h-4 w-4 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-blue-500 shadow-lg ring-2 ring-white">
-                <div className="h-1.5 w-1.5 rounded-full bg-white"></div>
-              </div>
-            </div>
-          </Marker>
+            {/* Outer pulsing circle */}
+            <Layer
+              id="user-location-pulse"
+              type="circle"
+              paint={{
+                'circle-radius': 12,
+                'circle-color': '#3B82F6',
+                'circle-opacity': 0.3,
+                'circle-blur': 0.5,
+              }}
+            />
+            {/* Inner solid circle */}
+            <Layer
+              id="user-location-dot"
+              type="circle"
+              paint={{
+                'circle-radius': 8,
+                'circle-color': '#3B82F6',
+                'circle-opacity': 0.8,
+                'circle-stroke-width': 2,
+                'circle-stroke-color': '#FFFFFF',
+              }}
+            />
+            {/* Center white dot */}
+            <Layer
+              id="user-location-center"
+              type="circle"
+              paint={{
+                'circle-radius': 3,
+                'circle-color': '#FFFFFF',
+              }}
+            />
+          </Source>
         )}
 
         {/* Retailers Data Source with Clustering */}
