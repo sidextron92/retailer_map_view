@@ -204,8 +204,6 @@ export function MapView({ retailers, onMarkerClick }: MapViewProps) {
         maxZoom={20}
         minZoom={3}
         dragRotate={false}
-        touchRotate={false}
-        touchPitch={false}
         interactiveLayerIds={['clusters', 'unclustered-point']}
         onMouseMove={(e) => {
           const features = e.features;
