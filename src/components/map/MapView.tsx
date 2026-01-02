@@ -240,7 +240,6 @@ export function MapView({ retailers, onMarkerClick }: MapViewProps) {
         <GeolocateControl
           position="top-right"
           trackUserLocation
-          showUserHeading
           onGeolocate={(e) => {
             setUserLocation({
               latitude: e.coords.latitude,
