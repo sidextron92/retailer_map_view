@@ -159,8 +159,8 @@ export function MapView({ retailers, onMarkerClick }: MapViewProps) {
 
       // Parse all retailers at this location
       const retailersAtLocation = features
-        .filter((f) => f.properties.retailer)
-        .map((f) => JSON.parse(f.properties.retailer));
+        .filter((f) => f.properties && f.properties.retailer)
+        .map((f) => JSON.parse(f.properties!.retailer));
 
       if (retailersAtLocation.length === 0) return;
 
