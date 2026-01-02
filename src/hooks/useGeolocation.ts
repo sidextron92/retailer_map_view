@@ -1,73 +1,74 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useEffect } from 'react';
+
+interface UserLocation {
+  latitude: number;
+  longitude: number;
+}
 
 interface GeolocationState {
-  latitude: number | null;
-  longitude: number | null;
+  position: UserLocation | null;
   error: string | null;
   loading: boolean;
 }
 
 export function useGeolocation() {
   const [state, setState] = useState<GeolocationState>({
-    latitude: null,
-    longitude: null,
+    position: null,
     error: null,
-    loading: false,
+    loading: true,
   });
 
-  const getLocation = useCallback(() => {
+  useEffect(() => {
     if (!navigator.geolocation) {
-      setState((prev) => ({
-        ...prev,
+      setState({
+        position: null,
         error: 'Geolocation is not supported by your browser',
-      }));
+        loading: false,
+      });
       return;
     }
 
-    setState((prev) => ({ ...prev, loading: true, error: null }));
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setState({
+    const successHandler = (position: GeolocationPosition) => {
+      setState({
+        position: {
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
-          error: null,
-          loading: false,
-        });
-      },
-      (error) => {
-        let errorMessage = 'Failed to get your location';
+        },
+        error: null,
+        loading: false,
+      });
+    };
 
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            errorMessage = 'Location permission denied';
-            break;
-          case error.POSITION_UNAVAILABLE:
-            errorMessage = 'Location information unavailable';
-            break;
-          case error.TIMEOUT:
-            errorMessage = 'Location request timed out';
-            break;
-        }
+    const errorHandler = (error: GeolocationPositionError) => {
+      let errorMessage = 'Unable to retrieve your location';
 
-        setState((prev) => ({
-          ...prev,
-          error: errorMessage,
-          loading: false,
-        }));
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0,
+      switch (error.code) {
+        case error.PERMISSION_DENIED:
+          errorMessage = 'Location permission denied';
+          break;
+        case error.POSITION_UNAVAILABLE:
+          errorMessage = 'Location information unavailable';
+          break;
+        case error.TIMEOUT:
+          errorMessage = 'Location request timed out';
+          break;
       }
-    );
+
+      setState({
+        position: null,
+        error: errorMessage,
+        loading: false,
+      });
+    };
+
+    navigator.geolocation.getCurrentPosition(successHandler, errorHandler, {
+      enableHighAccuracy: true,
+      timeout: 5000,
+      maximumAge: 0,
+    });
   }, []);
 
-  return {
-    ...state,
-    getLocation,
-  };
+  return state;
 }

@@ -6,11 +6,13 @@ import Map, {
   Layer,
   NavigationControl,
   GeolocateControl,
+  Marker,
   MapRef
 } from 'react-map-gl/mapbox';
 import type { Retailer } from '@/types/retailer';
 import { MAPBOX_TOKEN, DEFAULT_MAP_CONFIG, CLUSTER_CONFIG } from '@/lib/mapbox/config';
 import { getMarkerColor } from '@/lib/utils/markers';
+import { useGeolocation } from '@/hooks/useGeolocation';
 
 interface MapViewProps {
   retailers: Retailer[];
@@ -24,6 +26,7 @@ export function MapView({ retailers, onMarkerClick }: MapViewProps) {
   const [mapLoaded, setMapLoaded] = useState(false);
   const [overlappingRetailers, setOverlappingRetailers] = useState<Retailer[]>([]);
   const [showOverlapDialog, setShowOverlapDialog] = useState(false);
+  const { position: userLocation } = useGeolocation();
 
   // Convert retailers to GeoJSON format
   const geojsonData = useMemo(() => {
@@ -240,6 +243,24 @@ export function MapView({ retailers, onMarkerClick }: MapViewProps) {
           trackUserLocation
           showUserHeading
         />
+
+        {/* Current Location Marker */}
+        {userLocation && (
+          <Marker
+            longitude={userLocation.longitude}
+            latitude={userLocation.latitude}
+            anchor="bottom"
+          >
+            <div className="relative">
+              {/* Pulsing circle animation */}
+              <div className="absolute -left-4 -top-4 h-8 w-8 animate-ping rounded-full bg-blue-400 opacity-75"></div>
+              {/* Main marker */}
+              <div className="relative flex h-8 w-8 items-center justify-center rounded-full bg-blue-500 shadow-lg ring-4 ring-white">
+                <div className="h-3 w-3 rounded-full bg-white"></div>
+              </div>
+            </div>
+          </Marker>
+        )}
 
         {/* Retailers Data Source with Clustering */}
         <Source
