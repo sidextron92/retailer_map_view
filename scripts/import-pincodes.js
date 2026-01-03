@@ -68,7 +68,7 @@ async function importPincodes() {
           '${officeName}',
           '${district}',
           '${state}',
-          ST_GeomFromGeoJSON('${geometryJson}')
+          ST_Multi(ST_GeomFromGeoJSON('${geometryJson}'))
         )`;
       }).join(',\n');
 
@@ -98,7 +98,7 @@ async function importPincodes() {
               '${officeName}',
               '${district}',
               '${state}',
-              ST_GeomFromGeoJSON('${geometryJson}')
+              ST_Multi(ST_GeomFromGeoJSON('${geometryJson}'))
             )
           `;
 
