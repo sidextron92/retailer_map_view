@@ -55,10 +55,10 @@ async function importPincodes() {
       // Build SQL INSERT statement with ST_GeomFromGeoJSON
       const values = batch.map((feature, idx) => {
         const props = feature.properties || {};
-        const pincode = (props.pincode || props.PIN || props.PINCODE || 'UNKNOWN').toString().replace(/'/g, "''");
-        const officeName = (props.office_name || props.OFFICE_NAME || '').toString().replace(/'/g, "''");
-        const district = (props.district || props.DISTRICT || '').toString().replace(/'/g, "''");
-        const state = (props.state || props.STATE || '').toString().replace(/'/g, "''");
+        const pincode = (props.Pincode || props.pincode || props.PIN || 'UNKNOWN').toString().replace(/'/g, "''");
+        const officeName = (props.Office_Name || props.office_name || '').toString().replace(/'/g, "''");
+        const district = (props.Division || props.district || props.DISTRICT || '').toString().replace(/'/g, "''");
+        const state = (props.Circle || props.state || props.STATE || '').toString().replace(/'/g, "''");
 
         // Escape single quotes in GeoJSON string
         const geometryJson = JSON.stringify(feature.geometry).replace(/'/g, "''");
@@ -85,10 +85,10 @@ async function importPincodes() {
 
         for (const feature of batch) {
           const props = feature.properties || {};
-          const pincode = (props.pincode || props.PIN || props.PINCODE || 'UNKNOWN').toString().replace(/'/g, "''");
-          const officeName = (props.office_name || props.OFFICE_NAME || '').toString().replace(/'/g, "''");
-          const district = (props.district || props.DISTRICT || '').toString().replace(/'/g, "''");
-          const state = (props.state || props.STATE || '').toString().replace(/'/g, "''");
+          const pincode = (props.Pincode || props.pincode || props.PIN || 'UNKNOWN').toString().replace(/'/g, "''");
+          const officeName = (props.Office_Name || props.office_name || '').toString().replace(/'/g, "''");
+          const district = (props.Division || props.district || props.DISTRICT || '').toString().replace(/'/g, "''");
+          const state = (props.Circle || props.state || props.STATE || '').toString().replace(/'/g, "''");
           const geometryJson = JSON.stringify(feature.geometry).replace(/'/g, "''");
 
           const singleSql = `
