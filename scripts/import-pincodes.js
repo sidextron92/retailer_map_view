@@ -1,0 +1,162 @@
+/**
+ * Script to import India pincode GeoJSON data into Supabase
+ *
+ * Usage: node scripts/import-pincodes.js
+ *
+ * Make sure to:
+ * 1. Run migration 003_create_pincode_boundaries.sql first
+ * 2. Set SUPABASE_URL and SUPABASE_SERVICE_KEY in .env.local
+ */
+
+const fs = require('fs');
+const path = require('path');
+const { createClient } = require('@supabase/supabase-js');
+
+// Load environment variables
+require('dotenv').config({ path: '.env.local' });
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
+
+if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
+  console.error('Error: Missing Supabase credentials in .env.local');
+  console.error('Required: NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_KEY');
+  process.exit(1);
+}
+
+// Create Supabase client with service key (bypasses RLS)
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+
+const GEOJSON_PATH = path.join(__dirname, '../public/All_India_pincode_Boundary-19312.geojson');
+const BATCH_SIZE = 100; // Insert 100 features at a time
+
+async function importPincodes() {
+  console.log('🚀 Starting pincode import...\n');
+
+  // Read GeoJSON file
+  console.log('📖 Reading GeoJSON file...');
+  const geojsonData = JSON.parse(fs.readFileSync(GEOJSON_PATH, 'utf8'));
+  const features = geojsonData.features;
+
+  console.log(`✅ Loaded ${features.length} pincode features\n`);
+
+  // Process in batches
+  const totalBatches = Math.ceil(features.length / BATCH_SIZE);
+  let successCount = 0;
+  let errorCount = 0;
+
+  for (let i = 0; i < features.length; i += BATCH_SIZE) {
+    const batch = features.slice(i, i + BATCH_SIZE);
+    const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+
+    console.log(`📦 Processing batch ${batchNum}/${totalBatches} (${batch.length} features)...`);
+
+    // Transform GeoJSON features to database rows
+    const rows = batch.map(feature => {
+      const props = feature.properties || {};
+
+      // Convert GeoJSON geometry to WKT (Well-Known Text) for PostGIS
+      const geometryWKT = convertGeometryToWKT(feature.geometry);
+
+      return {
+        pincode: props.pincode || props.PIN || props.PINCODE || 'UNKNOWN',
+        office_name: props.office_name || props.OFFICE_NAME || null,
+        district: props.district || props.DISTRICT || null,
+        state: props.state || props.STATE || null,
+        // PostGIS will parse WKT and create geometry
+        geometry: geometryWKT
+      };
+    });
+
+    try {
+      // Insert batch using raw SQL to handle geometry
+      const { data, error } = await supabase.rpc('insert_pincode_batch', {
+        batch_data: rows
+      });
+
+      if (error) {
+        // If RPC doesn't exist, fall back to direct insert
+        // This requires geometry as GeoJSON, not WKT
+        const rowsWithGeoJSON = batch.map(feature => {
+          const props = feature.properties || {};
+          return {
+            pincode: props.pincode || props.PIN || props.PINCODE || 'UNKNOWN',
+            office_name: props.office_name || props.OFFICE_NAME || null,
+            district: props.district || props.DISTRICT || null,
+            state: props.state || props.STATE || null,
+            geometry: `SRID=4326;${JSON.stringify(feature.geometry)}`
+          };
+        });
+
+        const { error: insertError } = await supabase
+          .from('pincode_boundaries')
+          .insert(rowsWithGeoJSON);
+
+        if (insertError) {
+          console.error(`❌ Error in batch ${batchNum}:`, insertError.message);
+          errorCount += batch.length;
+        } else {
+          successCount += batch.length;
+          console.log(`✅ Batch ${batchNum} inserted successfully`);
+        }
+      } else {
+        successCount += batch.length;
+        console.log(`✅ Batch ${batchNum} inserted successfully`);
+      }
+
+      // Add small delay to avoid rate limiting
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+    } catch (err) {
+      console.error(`❌ Error in batch ${batchNum}:`, err.message);
+      errorCount += batch.length;
+    }
+  }
+
+  console.log('\n📊 Import Summary:');
+  console.log(`   ✅ Success: ${successCount} features`);
+  console.log(`   ❌ Failed: ${errorCount} features`);
+  console.log(`   📈 Total: ${features.length} features`);
+
+  if (successCount > 0) {
+    console.log('\n🎉 Import completed! Pincode boundaries are now in Supabase.');
+  }
+}
+
+/**
+ * Convert GeoJSON geometry to WKT format for PostGIS
+ */
+function convertGeometryToWKT(geometry) {
+  if (!geometry) return null;
+
+  const type = geometry.type;
+  const coords = geometry.coordinates;
+
+  switch (type) {
+    case 'Polygon':
+      return `SRID=4326;POLYGON((${formatPolygonCoords(coords[0])}))`;
+
+    case 'MultiPolygon':
+      const polygons = coords.map(poly =>
+        `((${formatPolygonCoords(poly[0])}))`
+      ).join(',');
+      return `SRID=4326;MULTIPOLYGON(${polygons})`;
+
+    default:
+      console.warn(`Unknown geometry type: ${type}`);
+      return null;
+  }
+}
+
+/**
+ * Format polygon coordinates for WKT
+ */
+function formatPolygonCoords(coords) {
+  return coords.map(coord => `${coord[0]} ${coord[1]}`).join(',');
+}
+
+// Run import
+importPincodes().catch(err => {
+  console.error('💥 Fatal error:', err);
+  process.exit(1);
+});

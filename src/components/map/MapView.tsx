@@ -12,6 +12,7 @@ import Map, {
 import type { Retailer } from '@/types/retailer';
 import { MAPBOX_TOKEN, DEFAULT_MAP_CONFIG, CLUSTER_CONFIG } from '@/lib/mapbox/config';
 import { getMarkerColor } from '@/lib/utils/markers';
+import { usePincodeBoundaries } from '@/hooks/usePincodeBoundaries';
 
 interface MapViewProps {
   retailers: Retailer[];
@@ -27,6 +28,16 @@ export function MapView({ retailers, onMarkerClick, onLocationChange }: MapViewP
   const [overlappingRetailers, setOverlappingRetailers] = useState<Retailer[]>([]);
   const [showOverlapDialog, setShowOverlapDialog] = useState(false);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+
+  // Get current map bounds for viewport-based queries
+  const [mapBounds, setMapBounds] = useState<any>(null);
+
+  // Lazy-load pincode boundaries based on zoom level and viewport
+  const { data: pincodeData, loading: pincodeLoading } = usePincodeBoundaries({
+    zoom: viewState.zoom,
+    bounds: mapBounds,
+    minZoom: 12, // Only load when zoomed to city/locality level
+  });
 
   // Convert user location to GeoJSON format
   const userLocationGeojson = useMemo(() => {
@@ -215,8 +226,20 @@ export function MapView({ retailers, onMarkerClick, onLocationChange }: MapViewP
       <Map
         ref={mapRef}
         {...viewState}
-        onMove={(evt) => setViewState(evt.viewState)}
-        onLoad={() => setMapLoaded(true)}
+        onMove={(evt) => {
+          setViewState(evt.viewState);
+          // Update bounds for pincode queries
+          if (mapRef.current) {
+            setMapBounds(mapRef.current.getBounds());
+          }
+        }}
+        onLoad={() => {
+          setMapLoaded(true);
+          // Set initial bounds
+          if (mapRef.current) {
+            setMapBounds(mapRef.current.getBounds());
+          }
+        }}
         mapboxAccessToken={MAPBOX_TOKEN}
         mapStyle={DEFAULT_MAP_CONFIG.mapStyle}
         style={{ width: '100%', height: '100%' }}
@@ -266,6 +289,37 @@ export function MapView({ retailers, onMarkerClick, onLocationChange }: MapViewP
             onLocationChange?.(location);
           }}
         />
+
+        {/* Pincode Boundaries Layer - Only visible when zoomed in (minzoom: 12) */}
+        {pincodeData && (
+          <Source
+            id="pincode-boundaries"
+            type="geojson"
+            data={pincodeData}
+          >
+            {/* Polygon fill - subtle background */}
+            <Layer
+              id="pincode-fill"
+              type="fill"
+              paint={{
+                'fill-color': '#627BC1',
+                'fill-opacity': 0.08,
+              }}
+              minzoom={12}
+            />
+            {/* Polygon outline - visible boundary lines */}
+            <Layer
+              id="pincode-outline"
+              type="line"
+              paint={{
+                'line-color': '#627BC1',
+                'line-width': 1,
+                'line-opacity': 0.5,
+              }}
+              minzoom={12}
+            />
+          </Source>
+        )}
 
         {/* Current Location Layer - Rendered first to appear below retailer markers */}
         {userLocationGeojson && (
