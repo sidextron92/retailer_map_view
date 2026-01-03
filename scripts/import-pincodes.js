@@ -28,7 +28,7 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
 const GEOJSON_PATH = path.join(__dirname, '../public/All_India_pincode_Boundary-19312.geojson');
-const BATCH_SIZE = 100; // Insert 100 features at a time
+const BATCH_SIZE = 50; // Smaller batches for better error handling
 
 async function importPincodes() {
   console.log('🚀 Starting pincode import...\n');
@@ -51,53 +51,65 @@ async function importPincodes() {
 
     console.log(`📦 Processing batch ${batchNum}/${totalBatches} (${batch.length} features)...`);
 
-    // Transform GeoJSON features to database rows
-    const rows = batch.map(feature => {
-      const props = feature.properties || {};
-
-      // Convert GeoJSON geometry to WKT (Well-Known Text) for PostGIS
-      const geometryWKT = convertGeometryToWKT(feature.geometry);
-
-      return {
-        pincode: props.pincode || props.PIN || props.PINCODE || 'UNKNOWN',
-        office_name: props.office_name || props.OFFICE_NAME || null,
-        district: props.district || props.DISTRICT || null,
-        state: props.state || props.STATE || null,
-        // PostGIS will parse WKT and create geometry
-        geometry: geometryWKT
-      };
-    });
-
     try {
-      // Insert batch using raw SQL to handle geometry
-      const { data, error } = await supabase.rpc('insert_pincode_batch', {
-        batch_data: rows
-      });
+      // Build SQL INSERT statement with ST_GeomFromGeoJSON
+      const values = batch.map((feature, idx) => {
+        const props = feature.properties || {};
+        const pincode = (props.pincode || props.PIN || props.PINCODE || 'UNKNOWN').toString().replace(/'/g, "''");
+        const officeName = (props.office_name || props.OFFICE_NAME || '').toString().replace(/'/g, "''");
+        const district = (props.district || props.DISTRICT || '').toString().replace(/'/g, "''");
+        const state = (props.state || props.STATE || '').toString().replace(/'/g, "''");
+
+        // Escape single quotes in GeoJSON string
+        const geometryJson = JSON.stringify(feature.geometry).replace(/'/g, "''");
+
+        return `(
+          '${pincode}',
+          '${officeName}',
+          '${district}',
+          '${state}',
+          ST_GeomFromGeoJSON('${geometryJson}')
+        )`;
+      }).join(',\n');
+
+      const sql = `
+        INSERT INTO pincode_boundaries (pincode, office_name, district, state, geometry)
+        VALUES ${values}
+      `;
+
+      const { error } = await supabase.rpc('exec_sql', { sql_query: sql });
 
       if (error) {
-        // If RPC doesn't exist, fall back to direct insert
-        // This requires geometry as GeoJSON, not WKT
-        const rowsWithGeoJSON = batch.map(feature => {
+        // Fallback: Try inserting one by one to identify problematic features
+        console.log('⚠️  Batch insert failed, trying individual inserts...');
+
+        for (const feature of batch) {
           const props = feature.properties || {};
-          return {
-            pincode: props.pincode || props.PIN || props.PINCODE || 'UNKNOWN',
-            office_name: props.office_name || props.OFFICE_NAME || null,
-            district: props.district || props.DISTRICT || null,
-            state: props.state || props.STATE || null,
-            geometry: `SRID=4326;${JSON.stringify(feature.geometry)}`
-          };
-        });
+          const pincode = (props.pincode || props.PIN || props.PINCODE || 'UNKNOWN').toString().replace(/'/g, "''");
+          const officeName = (props.office_name || props.OFFICE_NAME || '').toString().replace(/'/g, "''");
+          const district = (props.district || props.DISTRICT || '').toString().replace(/'/g, "''");
+          const state = (props.state || props.STATE || '').toString().replace(/'/g, "''");
+          const geometryJson = JSON.stringify(feature.geometry).replace(/'/g, "''");
 
-        const { error: insertError } = await supabase
-          .from('pincode_boundaries')
-          .insert(rowsWithGeoJSON);
+          const singleSql = `
+            INSERT INTO pincode_boundaries (pincode, office_name, district, state, geometry)
+            VALUES (
+              '${pincode}',
+              '${officeName}',
+              '${district}',
+              '${state}',
+              ST_GeomFromGeoJSON('${geometryJson}')
+            )
+          `;
 
-        if (insertError) {
-          console.error(`❌ Error in batch ${batchNum}:`, insertError.message);
-          errorCount += batch.length;
-        } else {
-          successCount += batch.length;
-          console.log(`✅ Batch ${batchNum} inserted successfully`);
+          const { error: singleError } = await supabase.rpc('exec_sql', { sql_query: singleSql });
+
+          if (singleError) {
+            console.error(`  ❌ Failed to insert pincode ${pincode}:`, singleError.message);
+            errorCount++;
+          } else {
+            successCount++;
+          }
         }
       } else {
         successCount += batch.length;
@@ -105,7 +117,7 @@ async function importPincodes() {
       }
 
       // Add small delay to avoid rate limiting
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, 200));
 
     } catch (err) {
       console.error(`❌ Error in batch ${batchNum}:`, err.message);
@@ -120,39 +132,11 @@ async function importPincodes() {
 
   if (successCount > 0) {
     console.log('\n🎉 Import completed! Pincode boundaries are now in Supabase.');
+    console.log('\n📝 Next steps:');
+    console.log('   1. Verify data in Supabase Dashboard → Table Editor → pincode_boundaries');
+    console.log('   2. Test the map at zoom level 12+');
+    console.log('   3. Optionally remove the large GeoJSON file from /public folder');
   }
-}
-
-/**
- * Convert GeoJSON geometry to WKT format for PostGIS
- */
-function convertGeometryToWKT(geometry) {
-  if (!geometry) return null;
-
-  const type = geometry.type;
-  const coords = geometry.coordinates;
-
-  switch (type) {
-    case 'Polygon':
-      return `SRID=4326;POLYGON((${formatPolygonCoords(coords[0])}))`;
-
-    case 'MultiPolygon':
-      const polygons = coords.map(poly =>
-        `((${formatPolygonCoords(poly[0])}))`
-      ).join(',');
-      return `SRID=4326;MULTIPOLYGON(${polygons})`;
-
-    default:
-      console.warn(`Unknown geometry type: ${type}`);
-      return null;
-  }
-}
-
-/**
- * Format polygon coordinates for WKT
- */
-function formatPolygonCoords(coords) {
-  return coords.map(coord => `${coord[0]} ${coord[1]}`).join(',');
 }
 
 // Run import

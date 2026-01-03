@@ -67,6 +67,15 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Create helper function to execute raw SQL (for data import)
+CREATE OR REPLACE FUNCTION exec_sql(sql_query TEXT)
+RETURNS void AS $$
+BEGIN
+  EXECUTE sql_query;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- Grant permissions
 GRANT SELECT ON pincode_boundaries TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION get_pincodes_in_viewport TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION exec_sql TO service_role;
