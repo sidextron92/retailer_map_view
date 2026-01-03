@@ -27,6 +27,7 @@ function HomeContent() {
 
   const [selectedRetailer, setSelectedRetailer] = useState<Retailer | null>(null);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const filters = useFilterStore();
   const activeFilterCount = getActiveFilterCount(filters);
 
@@ -106,6 +107,7 @@ function HomeContent() {
       <MapView
         retailers={filteredRetailers}
         onMarkerClick={setSelectedRetailer}
+        onLocationChange={setUserLocation}
       />
 
       {/* Filter Toggle Button */}
@@ -131,6 +133,7 @@ function HomeContent() {
         retailer={selectedRetailer}
         isOpen={!!selectedRetailer}
         onClose={() => setSelectedRetailer(null)}
+        userLocation={userLocation}
       />
     </main>
   );

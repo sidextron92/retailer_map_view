@@ -16,9 +16,10 @@ import { getMarkerColor } from '@/lib/utils/markers';
 interface MapViewProps {
   retailers: Retailer[];
   onMarkerClick: (retailer: Retailer) => void;
+  onLocationChange?: (location: { latitude: number; longitude: number } | null) => void;
 }
 
-export function MapView({ retailers, onMarkerClick }: MapViewProps) {
+export function MapView({ retailers, onMarkerClick, onLocationChange }: MapViewProps) {
   const [viewState, setViewState] = useState(DEFAULT_MAP_CONFIG.initialViewState);
   const [cursor, setCursor] = useState<string>('auto');
   const mapRef = useRef<MapRef>(null);
@@ -257,10 +258,12 @@ export function MapView({ retailers, onMarkerClick }: MapViewProps) {
           position="top-right"
           trackUserLocation
           onGeolocate={(e) => {
-            setUserLocation({
+            const location = {
               latitude: e.coords.latitude,
               longitude: e.coords.longitude,
-            });
+            };
+            setUserLocation(location);
+            onLocationChange?.(location);
           }}
         />
 

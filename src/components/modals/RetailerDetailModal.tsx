@@ -19,11 +19,13 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { calculateDistance, formatDistance } from '@/lib/utils/distance';
 
 interface RetailerDetailModalProps {
   retailer: Retailer | null;
   isOpen: boolean;
   onClose: () => void;
+  userLocation?: { latitude: number; longitude: number } | null;
 }
 
 function openGoogleMaps(lat: number, lng: number): void {
@@ -47,8 +49,19 @@ export function RetailerDetailModal({
   retailer,
   isOpen,
   onClose,
+  userLocation,
 }: RetailerDetailModalProps) {
   if (!retailer) return null;
+
+  // Calculate distance if user location is available
+  const distance = userLocation
+    ? calculateDistance(
+        userLocation.latitude,
+        userLocation.longitude,
+        retailer.latitude,
+        retailer.longitude
+      )
+    : null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -125,6 +138,17 @@ export function RetailerDetailModal({
             <h3 className="text-sm font-semibold text-gray-700">
               Location Details
             </h3>
+
+            {/* Distance from current location */}
+            {distance !== null && (
+              <div className="flex items-center gap-3 bg-blue-50 rounded-lg p-3">
+                <Navigation className="h-4 w-4 text-blue-600" />
+                <div>
+                  <p className="text-xs text-blue-600 font-medium">Distance from you</p>
+                  <p className="text-sm font-semibold text-blue-700">{formatDistance(distance)}</p>
+                </div>
+              </div>
+            )}
 
             {retailer.phone && (
               <div className="flex items-center gap-3">
