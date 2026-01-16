@@ -260,7 +260,7 @@ export function MapView({ retailers, onMarkerClick, onLocationChange }: MapViewP
 
           // Check for pincode hover
           const pincodeFeature = features?.find(
-            f => f.layer.id === 'pincode-fill' || f.layer.id === 'pincode-outline'
+            f => f.layer?.id === 'pincode-fill' || f.layer?.id === 'pincode-outline'
           );
 
           if (pincodeFeature && pincodeFeature.properties) {
@@ -290,7 +290,7 @@ export function MapView({ retailers, onMarkerClick, onLocationChange }: MapViewP
 
           // Filter out pincode layers - prioritize markers and clusters
           const clickableFeature = features.find(
-            f => f.layer.id !== 'pincode-fill' && f.layer.id !== 'pincode-outline'
+            f => f.layer?.id !== 'pincode-fill' && f.layer?.id !== 'pincode-outline'
           );
 
           if (!clickableFeature) return;
