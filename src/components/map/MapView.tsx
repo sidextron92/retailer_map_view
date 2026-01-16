@@ -29,14 +29,22 @@ export function MapView({ retailers, onMarkerClick, onLocationChange }: MapViewP
   const [showOverlapDialog, setShowOverlapDialog] = useState(false);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
 
+  // Pincode hover state
+  const [hoveredPincode, setHoveredPincode] = useState<{
+    pincode: string;
+    office_name: string;
+    x: number;
+    y: number;
+  } | null>(null);
+
   // Get current map bounds for viewport-based queries
   const [mapBounds, setMapBounds] = useState<any>(null);
 
   // Lazy-load pincode boundaries based on zoom level and viewport
-  const { data: pincodeData, loading: pincodeLoading } = usePincodeBoundaries({
+  const { data: pincodeData, loading: pincodeLoading, cacheStats } = usePincodeBoundaries({
     zoom: viewState.zoom,
     bounds: mapBounds,
-    minZoom: 12, // Only load when zoomed to city/locality level
+    minZoom: 8, // Only load when zoomed to country/region level (more zoomed out)
   });
 
   // Convert user location to GeoJSON format
@@ -246,29 +254,59 @@ export function MapView({ retailers, onMarkerClick, onLocationChange }: MapViewP
         maxZoom={20}
         minZoom={3}
         dragRotate={false}
-        interactiveLayerIds={['clusters', 'unclustered-point']}
+        interactiveLayerIds={['clusters', 'unclustered-point', 'pincode-fill', 'pincode-outline']}
         onMouseMove={(e) => {
           const features = e.features;
-          if (features && features.length > 0) {
+
+          // Check for pincode hover
+          const pincodeFeature = features?.find(
+            f => f.layer.id === 'pincode-fill' || f.layer.id === 'pincode-outline'
+          );
+
+          if (pincodeFeature && pincodeFeature.properties) {
+            setHoveredPincode({
+              pincode: pincodeFeature.properties.pincode || '',
+              office_name: pincodeFeature.properties.office_name || '',
+              x: e.point.x,
+              y: e.point.y,
+            });
+            setCursor('pointer');
+          } else if (features && features.length > 0) {
+            setHoveredPincode(null);
             setCursor('pointer');
           } else {
+            setHoveredPincode(null);
             setCursor('auto');
           }
         }}
-        onMouseLeave={() => setCursor('auto')}
+        onMouseLeave={() => {
+          setCursor('auto');
+          setHoveredPincode(null);
+        }}
         onClick={(e) => {
           const features = e.features;
 
           if (!features || features.length === 0) return;
 
-          const feature = features[0];
+          // Filter out pincode layers - prioritize markers and clusters
+          const clickableFeature = features.find(
+            f => f.layer.id !== 'pincode-fill' && f.layer.id !== 'pincode-outline'
+          );
+
+          if (!clickableFeature) return;
+
+          // Create a modified event with only the clickable feature
+          const modifiedEvent = {
+            ...e,
+            features: [clickableFeature]
+          };
 
           // Check if it's a cluster
-          if (feature.properties && (feature.properties.cluster || feature.properties.point_count)) {
+          if (clickableFeature.properties && (clickableFeature.properties.cluster || clickableFeature.properties.point_count)) {
             e.preventDefault();
-            handleClusterClick(e);
-          } else if (feature.layer && feature.layer.id === 'unclustered-point') {
-            handleMarkerClick(e);
+            handleClusterClick(modifiedEvent);
+          } else if (clickableFeature.layer && clickableFeature.layer.id === 'unclustered-point') {
+            handleMarkerClick(modifiedEvent);
           }
         }}
         cursor={cursor}
@@ -289,37 +327,6 @@ export function MapView({ retailers, onMarkerClick, onLocationChange }: MapViewP
             onLocationChange?.(location);
           }}
         />
-
-        {/* Pincode Boundaries Layer - Only visible when zoomed in (minzoom: 12) */}
-        {pincodeData && (
-          <Source
-            id="pincode-boundaries"
-            type="geojson"
-            data={pincodeData}
-          >
-            {/* Polygon fill - subtle background */}
-            <Layer
-              id="pincode-fill"
-              type="fill"
-              paint={{
-                'fill-color': '#627BC1',
-                'fill-opacity': 0.08,
-              }}
-              minzoom={12}
-            />
-            {/* Polygon outline - visible boundary lines */}
-            <Layer
-              id="pincode-outline"
-              type="line"
-              paint={{
-                'line-color': '#627BC1',
-                'line-width': 1,
-                'line-opacity': 0.5,
-              }}
-              minzoom={12}
-            />
-          </Source>
-        )}
 
         {/* Current Location Layer - Rendered first to appear below retailer markers */}
         {userLocationGeojson && (
@@ -449,6 +456,49 @@ export function MapView({ retailers, onMarkerClick, onLocationChange }: MapViewP
             }}
           />
         </Source>
+
+        {/* Pincode Boundaries Layer - Rendered last but placed at bottom of visual stack */}
+        {pincodeData && (
+          <Source
+            id="pincode-boundaries"
+            type="geojson"
+            data={pincodeData}
+          >
+            {/* Polygon fill - varied colors for each pincode, rendered at the very bottom */}
+            <Layer
+              id="pincode-fill"
+              type="fill"
+              paint={{
+                'fill-color': ['get', 'fillColor'],
+                'fill-opacity': [
+                  'case',
+                  ['boolean', ['feature-state', 'hover'], false],
+                  0.15,
+                  0.04
+                ],
+              }}
+              minzoom={8}
+              beforeId="clusters"
+            />
+            {/* Polygon outline - varied colors, rendered at bottom */}
+            <Layer
+              id="pincode-outline"
+              type="line"
+              paint={{
+                'line-color': ['get', 'outlineColor'],
+                'line-width': [
+                  'case',
+                  ['boolean', ['feature-state', 'hover'], false],
+                  2.5,
+                  1.2
+                ],
+                'line-opacity': 0.6,
+              }}
+              minzoom={8}
+              beforeId="clusters"
+            />
+          </Source>
+        )}
       </Map>
 
       {/* Retailer count badge */}
@@ -518,6 +568,22 @@ export function MapView({ retailers, onMarkerClick, onLocationChange }: MapViewP
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Pincode hover tooltip */}
+      {hoveredPincode && (
+        <div
+          className="pointer-events-none absolute z-50 rounded-lg bg-gray-900 px-3 py-2 text-sm text-white shadow-lg"
+          style={{
+            left: hoveredPincode.x + 10,
+            top: hoveredPincode.y + 10,
+          }}
+        >
+          <div className="font-semibold">PIN: {hoveredPincode.pincode}</div>
+          {hoveredPincode.office_name && (
+            <div className="text-xs text-gray-300">{hoveredPincode.office_name}</div>
+          )}
         </div>
       )}
     </div>

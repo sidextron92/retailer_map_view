@@ -40,6 +40,17 @@ async function importPincodes() {
 
   console.log(`✅ Loaded ${features.length} pincode features\n`);
 
+  // Show sample data from first feature for verification
+  if (features.length > 0) {
+    const sampleProps = features[0].properties || {};
+    console.log('📋 Sample data from first feature:');
+    console.log(`   Pincode: ${sampleProps.Pincode || sampleProps.pincode || 'N/A'}`);
+    console.log(`   Office Name: ${sampleProps.Office_Name || sampleProps.office_name || 'N/A'}`);
+    console.log(`   District: ${sampleProps.Division || sampleProps.district || 'N/A'}`);
+    console.log(`   State: ${sampleProps.Circle || sampleProps.state || 'N/A'}`);
+    console.log(`   Geometry Type: ${features[0].geometry?.type || 'N/A'}\n`);
+  }
+
   // Process in batches
   const totalBatches = Math.ceil(features.length / BATCH_SIZE);
   let successCount = 0;
@@ -50,6 +61,15 @@ async function importPincodes() {
     const batchNum = Math.floor(i / BATCH_SIZE) + 1;
 
     console.log(`📦 Processing batch ${batchNum}/${totalBatches} (${batch.length} features)...`);
+
+    // Show sample from first batch for verification
+    if (batchNum === 1 && batch.length > 0) {
+      const firstFeature = batch[0];
+      const props = firstFeature.properties || {};
+      const pincode = (props.Pincode || props.pincode || props.PIN || 'UNKNOWN').toString();
+      const officeName = (props.Office_Name || props.office_name || '').toString();
+      console.log(`   → First pincode in batch: ${pincode} - ${officeName}`);
+    }
 
     try {
       // Build SQL INSERT statement with ST_GeomFromGeoJSON

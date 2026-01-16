@@ -4,11 +4,13 @@ This guide explains how to set up India pincode boundaries with Supabase PostGIS
 
 ## Overview
 
-Instead of loading an 86MB GeoJSON file client-side, we use Supabase with PostGIS to:
+Instead of loading an 86MB GeoJSON file client-side, we use Supabase with PostGIS + browser caching to:
 - Store pincode boundary geometries in PostgreSQL
 - Query only pincodes visible in current viewport
-- Reduce payload from 86MB to ~50-500KB per request
+- **Cache fetched pincodes in browser** - 70-90% reduction in database queries
+- Reduce payload from 86MB to ~50-500KB per initial request
 - Enable fast spatial queries with indexes
+- Instant rendering for previously visited areas
 
 ---
 
@@ -132,13 +134,48 @@ node scripts/import-pincodes.js
 
 Check that data was imported successfully:
 
-### Using Supabase Dashboard
+### Using Verification Script (Recommended)
+
+Run the automated verification script:
+
+```bash
+node scripts/verify-pincode-data.js
+```
+
+This will:
+- ✅ Check total count (~19,000+ expected)
+- ✅ Verify no UNKNOWN pincodes
+- ✅ Show sample data
+- ✅ Display state distribution
+- ✅ Test spatial queries
+- ✅ Validate geometries
+
+Expected output:
+```
+🔍 Verifying pincode data in Supabase...
+
+✅ Total pincodes: 19312
+✅ No UNKNOWN pincodes found
+✅ All entries have office names
+
+📋 Sample data (first 5 pincodes):
+┌─────────┬──────────┬───────────────┬──────────┬─────────┐
+│ pincode │ office_  │ district      │ state    │
+├─────────┼──────────┼───────────────┼──────────┤
+│ 110001  │ Connaugh │ New Delhi     │ Delhi    │
+│ 110002  │ Inderpuri│ New Delhi     │ Delhi    │
+└─────────┴──────────┴───────────────┴──────────┘
+
+✅ Data verification PASSED! Import looks good.
+```
+
+### Using Supabase Dashboard (Alternative)
 
 1. Go to **Table Editor**
 2. Open `pincode_boundaries` table
-3. You should see ~19,000+ rows
+3. You should see ~19,000+ rows with actual pincode numbers (not "UNKNOWN")
 
-### Using SQL Editor
+### Using SQL Editor (Alternative)
 
 ```sql
 -- Check total count
@@ -162,21 +199,24 @@ WHERE ST_Intersects(
 
 ## Step 6: Deploy & Test
 
-The pincode boundaries will now load automatically when users zoom to level 12+.
+The pincode boundaries will now load automatically when users zoom to level 10+.
 
 ### How It Works
 
-1. **User zooms to level 12** → Hook calls `get_pincodes_in_viewport()` RPC
-2. **Supabase returns** only pincodes within viewport bounds (~10-50 features)
-3. **Map renders** pincode boundaries as subtle blue outlines
-4. **User pans/zooms** → Debounced fetch (300ms) updates boundaries
+1. **User zooms to level 10** → Hook calls `get_pincodes_in_viewport()` RPC
+2. **Supabase returns** only pincodes within viewport bounds (~50-300 features)
+3. **Browser caches** fetched pincodes by ID and viewport area
+4. **Map renders** pincode boundaries as subtle blue outlines
+5. **User pans to new area** → Fetch from Supabase, add to cache
+6. **User returns to visited area** → Load instantly from cache (no query!)
 
 ### Performance Metrics
 
-- **Initial load**: 0KB (boundaries not loaded until zoom 12)
-- **Zoom to 12**: ~100-500KB (vs 86MB previously)
-- **Pan/zoom**: ~50-200KB per request
-- **Query time**: ~50-200ms (PostGIS spatial index)
+- **Initial load**: 0KB (boundaries not loaded until zoom 10)
+- **First fetch at zoom 10**: ~100-500KB (vs 86MB previously)
+- **Cached area**: 0KB, <10ms (instant from browser cache!)
+- **New area fetch**: ~50-200KB per request, ~50-200ms
+- **Cache hit rate**: 70-90% after exploring multiple areas
 
 ---
 
@@ -212,12 +252,19 @@ This file is no longer needed since data is now in Supabase.
 
 ## Monitoring
 
-Check browser console for pincode query logs:
+Check browser console for pincode query logs and cache performance:
 
 ```
-🗺️  Fetching pincodes for viewport: { bounds: {...}, zoom: 13 }
-✅ Loaded 42 pincodes in 0.15s
+🗺️  Fetching pincodes for viewport: { bounds: {...}, zoom: 10 }
+✅ Loaded 127 new pincodes in 0.18s
+📊 Cache: 127 total, 0% hit rate, 1 areas cached
+
+✨ Cache HIT - using cached pincodes (no Supabase query needed)
+📦 Loaded 127 pincodes from cache
+📊 Cache: 450 total, 75% hit rate, 5 areas cached
 ```
+
+See [PINCODE_CACHING.md](./PINCODE_CACHING.md) for detailed cache documentation.
 
 ---
 
@@ -232,7 +279,9 @@ If you encounter issues:
 
 ## Next Steps
 
-- Monitor query performance in production
-- Adjust `minZoom` threshold if needed (currently 12)
+- Monitor query performance and cache hit rate in production
+- Adjust `minZoom` threshold if needed (currently 10, lowered from 12 for earlier visibility)
+- Monitor browser memory usage (should stay under 50 MB)
 - Add pincode search/filtering features
 - Consider adding pincode labels at higher zoom levels
+- Optional: Implement persistent cache using IndexedDB

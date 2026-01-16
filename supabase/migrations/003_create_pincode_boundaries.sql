@@ -34,7 +34,7 @@ CREATE OR REPLACE FUNCTION get_pincodes_in_viewport(
   min_lat FLOAT,
   max_lng FLOAT,
   max_lat FLOAT,
-  zoom_level INT DEFAULT 12
+  zoom_level INT DEFAULT 10
 )
 RETURNS TABLE (
   id BIGINT,
@@ -45,8 +45,8 @@ RETURNS TABLE (
   geometry GEOMETRY
 ) AS $$
 BEGIN
-  -- Only return data if zoom level is 12 or higher
-  IF zoom_level < 12 THEN
+  -- Only return data if zoom level is 10 or higher (state level)
+  IF zoom_level < 10 THEN
     RETURN;
   END IF;
 
