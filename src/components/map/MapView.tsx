@@ -10,20 +10,48 @@ import Map, {
   MapRef
 } from 'react-map-gl/mapbox';
 import type { Retailer } from '@/types/retailer';
+import type { Darkstore } from '@/types/darkstore';
 import { MAPBOX_TOKEN, DEFAULT_MAP_CONFIG, CLUSTER_CONFIG } from '@/lib/mapbox/config';
 import { getMarkerColor } from '@/lib/utils/markers';
 import { usePincodeBoundaries } from '@/hooks/usePincodeBoundaries';
 import { formatDeliveryTAT } from '@/lib/utils/delivery-tat';
+import { calculateDistance, formatDistance } from '@/lib/utils/distance';
+
+interface DistanceLine {
+  id: string;
+  startLat: number;
+  startLng: number;
+  endLat: number;
+  endLng: number;
+  distance: number;
+  color: string;
+}
 
 interface MapViewProps {
   retailers: Retailer[];
+  darkstore?: Darkstore | null;
+  isOpsMode?: boolean;
   onMarkerClick: (retailer: Retailer) => void;
   onLocationChange?: (location: { latitude: number; longitude: number } | null) => void;
   onZoomChange?: (zoom: number) => void;
   onPincodeLoadReady?: (loadPincodes: () => Promise<void>) => void;
 }
 
-export function MapView({ retailers, onMarkerClick, onLocationChange, onZoomChange, onPincodeLoadReady }: MapViewProps) {
+// Color palette for distance lines
+const LINE_COLORS = [
+  '#ef4444', // red
+  '#f97316', // orange
+  '#eab308', // yellow
+  '#22c55e', // green
+  '#06b6d4', // cyan
+  '#3b82f6', // blue
+  '#8b5cf6', // violet
+  '#ec4899', // pink
+  '#f43f5e', // rose
+  '#14b8a6', // teal
+];
+
+export function MapView({ retailers, darkstore, isOpsMode, onMarkerClick, onLocationChange, onZoomChange, onPincodeLoadReady }: MapViewProps) {
   const [viewState, setViewState] = useState(DEFAULT_MAP_CONFIG.initialViewState);
   const [cursor, setCursor] = useState<string>('auto');
   const mapRef = useRef<MapRef>(null);
@@ -31,6 +59,12 @@ export function MapView({ retailers, onMarkerClick, onLocationChange, onZoomChan
   const [overlappingRetailers, setOverlappingRetailers] = useState<Retailer[]>([]);
   const [showOverlapDialog, setShowOverlapDialog] = useState(false);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [showDarkstorePopup, setShowDarkstorePopup] = useState(false);
+
+  // Distance line drawing state (only in ops mode)
+  const [distanceLines, setDistanceLines] = useState<DistanceLine[]>([]);
+  const [isDrawingLine, setIsDrawingLine] = useState(false);
+  const [currentLineEnd, setCurrentLineEnd] = useState<{ lat: number; lng: number } | null>(null);
 
   // Pincode hover state
   const [hoveredPincode, setHoveredPincode] = useState<{
@@ -86,6 +120,11 @@ export function MapView({ retailers, onMarkerClick, onLocationChange, onZoomChan
     };
   }, [userLocation]);
 
+  // Get next line color
+  const getNextLineColor = useCallback(() => {
+    return LINE_COLORS[distanceLines.length % LINE_COLORS.length];
+  }, [distanceLines.length]);
+
   // Convert retailers to GeoJSON format
   const geojsonData = useMemo(() => {
     return {
@@ -108,9 +147,53 @@ export function MapView({ retailers, onMarkerClick, onLocationChange, onZoomChan
     };
   }, [retailers]);
 
-  // Fit map to show all markers
+  // Convert distance lines to GeoJSON format
+  const distanceLinesGeoJSON = useMemo(() => {
+    const allLines = [...distanceLines];
+
+    // Add current drawing line if active
+    if (isDrawingLine && currentLineEnd && darkstore) {
+      const currentDistance = calculateDistance(
+        darkstore.latitude,
+        darkstore.longitude,
+        currentLineEnd.lat,
+        currentLineEnd.lng
+      );
+
+      allLines.push({
+        id: 'current-drawing',
+        startLat: darkstore.latitude,
+        startLng: darkstore.longitude,
+        endLat: currentLineEnd.lat,
+        endLng: currentLineEnd.lng,
+        distance: currentDistance,
+        color: getNextLineColor(),
+      });
+    }
+
+    return {
+      type: 'FeatureCollection' as const,
+      features: allLines.map((line) => ({
+        type: 'Feature' as const,
+        properties: {
+          id: line.id,
+          color: line.color,
+          distance: line.distance,
+        },
+        geometry: {
+          type: 'LineString' as const,
+          coordinates: [
+            [line.startLng, line.startLat],
+            [line.endLng, line.endLat],
+          ],
+        },
+      })),
+    };
+  }, [distanceLines, isDrawingLine, currentLineEnd, darkstore, getNextLineColor]);
+
+  // Fit map to show all markers (only if no darkstore)
   useEffect(() => {
-    if (!mapRef.current || !mapLoaded || retailers.length === 0) return;
+    if (!mapRef.current || !mapLoaded || retailers.length === 0 || darkstore) return;
 
     const map = mapRef.current.getMap();
 
@@ -144,7 +227,83 @@ export function MapView({ retailers, onMarkerClick, onLocationChange, onZoomChan
         maxZoom: 15,
       }
     );
-  }, [retailers, mapLoaded]);
+  }, [retailers, mapLoaded, darkstore]);
+
+  // Auto-center to darkstore location when loaded
+  useEffect(() => {
+    if (!mapRef.current || !mapLoaded || !darkstore) return;
+
+    const map = mapRef.current.getMap();
+
+    // Fly to darkstore location
+    map.flyTo({
+      center: [darkstore.longitude, darkstore.latitude],
+      zoom: 14,
+      duration: 1500,
+      essential: true,
+    });
+  }, [darkstore, mapLoaded]);
+
+  // Clear distance lines when leaving ops mode
+  useEffect(() => {
+    if (!isOpsMode) {
+      setDistanceLines([]);
+      setIsDrawingLine(false);
+      setCurrentLineEnd(null);
+    }
+  }, [isOpsMode]);
+
+  // Handle darkstore marker mouse down - start drawing
+  const handleDarkstoreMouseDown = useCallback((e: any) => {
+    if (!isOpsMode || !darkstore) return;
+    e.stopPropagation();
+    e.preventDefault();
+    setIsDrawingLine(true);
+    setCurrentLineEnd({ lat: darkstore.latitude, lng: darkstore.longitude });
+  }, [isOpsMode, darkstore]);
+
+  // Handle map mouse move - update line end position
+  const handleMapMouseMove = useCallback((e: any) => {
+    if (!isDrawingLine || !darkstore) return;
+    const { lng, lat } = e.lngLat;
+    setCurrentLineEnd({ lat, lng });
+  }, [isDrawingLine, darkstore]);
+
+  // Handle mouse up - finalize line
+  const handleMouseUp = useCallback(() => {
+    if (!isDrawingLine || !currentLineEnd || !darkstore) return;
+
+    const distance = calculateDistance(
+      darkstore.latitude,
+      darkstore.longitude,
+      currentLineEnd.lat,
+      currentLineEnd.lng
+    );
+
+    const newLine: DistanceLine = {
+      id: `line-${Date.now()}`,
+      startLat: darkstore.latitude,
+      startLng: darkstore.longitude,
+      endLat: currentLineEnd.lat,
+      endLng: currentLineEnd.lng,
+      distance,
+      color: getNextLineColor(),
+    };
+
+    setDistanceLines((prev) => [...prev, newLine]);
+    setIsDrawingLine(false);
+    setCurrentLineEnd(null);
+  }, [isDrawingLine, currentLineEnd, darkstore, getNextLineColor]);
+
+  // Delete distance line
+  const deleteLine = useCallback((lineId: string) => {
+    setDistanceLines((prev) => prev.filter((line) => line.id !== lineId));
+  }, []);
+
+  // Clear all distance lines
+  const clearAllLines = useCallback(() => {
+    setDistanceLines([]);
+  }, []);
 
   // Handle cluster click - zoom to cluster bounds with smooth animation
   const handleClusterClick = useCallback((event: any) => {
@@ -279,6 +438,9 @@ export function MapView({ retailers, onMarkerClick, onLocationChange, onZoomChan
         dragRotate={false}
         interactiveLayerIds={['clusters', 'unclustered-point', 'pincode-fill', 'pincode-outline']}
         onMouseMove={(e) => {
+          // Handle distance line drawing
+          handleMapMouseMove(e);
+
           const features = e.features;
 
           // Check for pincode hover
@@ -307,6 +469,7 @@ export function MapView({ retailers, onMarkerClick, onLocationChange, onZoomChan
           setCursor('auto');
           setHoveredPincode(null);
         }}
+        onMouseUp={handleMouseUp}
         onClick={(e) => {
           const features = e.features;
 
@@ -523,14 +686,113 @@ export function MapView({ retailers, onMarkerClick, onLocationChange, onZoomChan
             />
           </Source>
         )}
+
+        {/* Distance Lines Layer */}
+        {isOpsMode && distanceLinesGeoJSON.features.length > 0 && (
+          <Source
+            id="distance-lines"
+            type="geojson"
+            data={distanceLinesGeoJSON}
+          >
+            <Layer
+              id="distance-lines-layer"
+              type="line"
+              paint={{
+                'line-color': ['get', 'color'],
+                'line-width': 3,
+                'line-opacity': 0.8,
+              }}
+            />
+          </Source>
+        )}
+
+        {/* Darkstore Marker */}
+        {darkstore && (
+          <Marker
+            longitude={darkstore.longitude}
+            latitude={darkstore.latitude}
+            anchor="bottom"
+            onClick={(e) => {
+              if (!isOpsMode || isDrawingLine) {
+                e.originalEvent.stopPropagation();
+                setShowDarkstorePopup(true);
+              }
+            }}
+          >
+            <div
+              className="cursor-pointer"
+              onMouseDown={handleDarkstoreMouseDown}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="40px" height="40px" fill="#1e3a8a">
+                <path d="M 12 2 A 1 1 0 0 0 11.289062 2.296875 L 1.203125 11.097656 A 0.5 0.5 0 0 0 1 11.5 A 0.5 0.5 0 0 0 1.5 12 L 4 12 L 4 20 C 4 20.552 4.448 21 5 21 L 9 21 C 9.552 21 10 20.552 10 20 L 10 14 L 14 14 L 14 20 C 14 20.552 14.448 21 15 21 L 19 21 C 19.552 21 20 20.552 20 20 L 20 12 L 22.5 12 A 0.5 0.5 0 0 0 23 11.5 A 0.5 0.5 0 0 0 22.796875 11.097656 L 12.716797 2.3027344 A 1 1 0 0 0 12.710938 2.296875 A 1 1 0 0 0 12 2 z"/>
+              </svg>
+            </div>
+          </Marker>
+        )}
       </Map>
 
-      {/* Retailer count badge */}
-      <div className="absolute bottom-4 left-4 rounded-lg bg-white px-4 py-2 shadow-lg">
-        <p className="text-sm font-medium text-gray-700">
-          {retailers.length} {retailers.length === 1 ? 'retailer' : 'retailers'}
-        </p>
+      {/* Retailer count badge and Clear All Lines button */}
+      <div className="absolute bottom-4 left-4 flex flex-col gap-2">
+        <div className="rounded-lg bg-white px-4 py-2 shadow-lg">
+          <p className="text-sm font-medium text-gray-700">
+            {retailers.length} {retailers.length === 1 ? 'retailer' : 'retailers'}
+          </p>
+        </div>
+
+        {/* Clear All Lines Button - Only visible in ops mode with lines */}
+        {isOpsMode && distanceLines.length > 0 && (
+          <button
+            onClick={clearAllLines}
+            className="rounded-lg bg-red-600 hover:bg-red-700 text-white px-4 py-2 shadow-lg text-sm font-medium transition-colors"
+          >
+            Clear All Lines ({distanceLines.length})
+          </button>
+        )}
       </div>
+
+      {/* Distance Line Tooltips */}
+      {isOpsMode && distanceLines.map((line) => {
+        if (!mapRef.current) return null;
+
+        const map = mapRef.current.getMap();
+        const point = map.project([line.endLng, line.endLat]);
+
+        return (
+          <div
+            key={line.id}
+            className="absolute z-40 flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-white shadow-lg"
+            style={{
+              left: point.x,
+              top: point.y - 40,
+              backgroundColor: 'rgba(0, 0, 0, 0.75)',
+            }}
+          >
+            <span>{formatDistance(line.distance)}</span>
+            <button
+              onClick={() => deleteLine(line.id)}
+              className="flex items-center justify-center w-5 h-5 rounded hover:bg-white/20 transition-colors"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        );
+      })}
+
+      {/* Current Drawing Line Tooltip */}
+      {isOpsMode && isDrawingLine && currentLineEnd && darkstore && mapRef.current && (
+        <div
+          className="absolute z-40 rounded-lg px-3 py-2 text-sm font-medium text-white shadow-lg pointer-events-none"
+          style={{
+            left: mapRef.current.getMap().project([currentLineEnd.lng, currentLineEnd.lat]).x,
+            top: mapRef.current.getMap().project([currentLineEnd.lng, currentLineEnd.lat]).y - 40,
+            backgroundColor: 'rgba(0, 0, 0, 0.75)',
+          }}
+        >
+          {formatDistance(calculateDistance(darkstore.latitude, darkstore.longitude, currentLineEnd.lat, currentLineEnd.lng))}
+        </div>
+      )}
 
       {/* Overlapping retailers selection dialog */}
       {showOverlapDialog && overlappingRetailers.length > 0 && (
@@ -615,6 +877,47 @@ export function MapView({ retailers, onMarkerClick, onLocationChange, onZoomChan
               : 'text-green-400'
           }`}>
             {formatDeliveryTAT(hoveredPincode.deliverytat)}
+          </div>
+        </div>
+      )}
+
+      {/* Darkstore Popup */}
+      {showDarkstorePopup && darkstore && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Darkstore Location
+              </h3>
+              <button
+                onClick={() => setShowDarkstorePopup(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="text-sm font-medium text-gray-500">Name</label>
+                <p className="text-base font-semibold text-gray-900">{darkstore.darkstore}</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-500">Address</label>
+                <p className="text-base text-gray-900">{darkstore.address}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Latitude</label>
+                  <p className="text-sm text-gray-900">{darkstore.latitude}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Longitude</label>
+                  <p className="text-sm text-gray-900">{darkstore.longitude}</p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

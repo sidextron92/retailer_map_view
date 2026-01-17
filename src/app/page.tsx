@@ -7,6 +7,7 @@ import { MapView } from '@/components/map/MapView';
 import { RetailerDetailModal } from '@/components/modals/RetailerDetailModal';
 import { FilterPanel } from '@/components/filters/FilterPanel';
 import { useRetailers } from '@/hooks/useRetailers';
+import { useDarkstore } from '@/hooks/useDarkstore';
 import { useFilterStore } from '@/store/filterStore';
 import { applyFilters, getActiveFilterCount } from '@/lib/utils/filters';
 import { Button } from '@/components/ui/button';
@@ -15,15 +16,23 @@ import type { Retailer } from '@/types/retailer';
 function HomeContent() {
   const searchParams = useSearchParams();
 
-  // Read URL parameters for server-side filtering
+  // Read URL parameters for operations mode and darkstore
+  const mode = searchParams.get('mode');
+  const darkstoreParam = searchParams.get('darkstore');
+  const isOpsMode = mode === 'ops';
+
+  // Read URL parameters for server-side filtering (retailers)
   const urlFilters = useMemo(() => ({
-    darkstore: searchParams.get('darkstore'),
+    darkstore: darkstoreParam,
     skId: searchParams.get('sk_id'),
     buyingCategory: searchParams.get('buying_category'),
-  }), [searchParams]);
+  }), [darkstoreParam, searchParams]);
 
   // Fetch retailers with server-side filters applied
   const { retailers, loading, error } = useRetailers(urlFilters);
+
+  // Fetch darkstore location if darkstore parameter is present
+  const { darkstore, loading: darkstoreLoading, error: darkstoreError } = useDarkstore(darkstoreParam);
 
   const [selectedRetailer, setSelectedRetailer] = useState<Retailer | null>(null);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -143,9 +152,16 @@ function HomeContent() {
   }
 
   return (
-    <main className="h-screen w-full overflow-hidden">
+    <main className="h-screen w-full overflow-hidden relative">
+      {/* Blue border overlay for ops mode */}
+      {isOpsMode && (
+        <div className="absolute inset-0 pointer-events-none z-50 border-4 border-blue-600" />
+      )}
+
       <MapView
         retailers={filteredRetailers}
+        darkstore={darkstore}
+        isOpsMode={isOpsMode}
         onMarkerClick={setSelectedRetailer}
         onLocationChange={setUserLocation}
         onZoomChange={setCurrentZoom}
