@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useMemo, useEffect, Suspense } from 'react';
+import { useState, useMemo, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Filter } from 'lucide-react';
+import { Filter, MapPin, Loader2 } from 'lucide-react';
 import { MapView } from '@/components/map/MapView';
 import { RetailerDetailModal } from '@/components/modals/RetailerDetailModal';
 import { FilterPanel } from '@/components/filters/FilterPanel';
@@ -31,11 +31,51 @@ function HomeContent() {
   const filters = useFilterStore();
   const activeFilterCount = getActiveFilterCount(filters);
 
+  // Pincode loading states
+  const [currentZoom, setCurrentZoom] = useState<number>(0);
+  const [loadPincodes, setLoadPincodes] = useState<(() => Promise<void>) | null>(null);
+  const [pincodeLoading, setPincodeLoading] = useState(false);
+  const [pincodeError, setPincodeError] = useState<Error | null>(null);
+  const [showErrorMessage, setShowErrorMessage] = useState(false);
+
   // Apply filters to retailers
   const filteredRetailers = useMemo(
     () => applyFilters(retailers, filters),
     [retailers, filters]
   );
+
+  // Handle pincode load function updates from MapView
+  const handlePincodeLoadReady = useCallback((loadFn: () => Promise<void>) => {
+    setLoadPincodes(() => loadFn);
+  }, []);
+
+  // Auto-hide error message after 5 seconds
+  useEffect(() => {
+    if (showErrorMessage) {
+      const timer = setTimeout(() => {
+        setShowErrorMessage(false);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [showErrorMessage]);
+
+  // Handle load pincodes button click
+  const handleLoadPincodesClick = async () => {
+    if (!loadPincodes) return;
+
+    try {
+      setPincodeLoading(true);
+      setPincodeError(null);
+      setShowErrorMessage(false);
+      await loadPincodes();
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error('Failed to load pincodes');
+      setPincodeError(err);
+      setShowErrorMessage(true);
+    } finally {
+      setPincodeLoading(false);
+    }
+  };
 
   // Loading state
   if (loading) {
@@ -108,22 +148,49 @@ function HomeContent() {
         retailers={filteredRetailers}
         onMarkerClick={setSelectedRetailer}
         onLocationChange={setUserLocation}
+        onZoomChange={setCurrentZoom}
+        onPincodeLoadReady={handlePincodeLoadReady}
       />
 
-      {/* Filter Toggle Button */}
-      <Button
-        onClick={() => setIsFilterOpen(true)}
-        className="fixed right-4 bottom-4 z-30 h-12 gap-2 shadow-lg"
-        size="lg"
-      >
-        <Filter className="h-5 w-5" />
-        Filters
-        {activeFilterCount > 0 && (
-          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs font-medium text-blue-600">
-            {activeFilterCount}
-          </span>
+      {/* Button Group - Fixed at bottom right */}
+      <div className="fixed right-4 bottom-4 z-30 flex flex-col gap-2 items-end">
+        {/* Load Pincodes Button - Only visible when zoom >= 10 */}
+        {currentZoom >= 10 && (
+          <Button
+            onClick={handleLoadPincodesClick}
+            className="h-9 gap-1.5 shadow-lg text-xs"
+            size="sm"
+            disabled={pincodeLoading || !loadPincodes}
+          >
+            {pincodeLoading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading...
+              </>
+            ) : (
+              <>
+                <MapPin className="h-4 w-4" />
+                Load Pincodes
+              </>
+            )}
+          </Button>
         )}
-      </Button>
+
+        {/* Filter Toggle Button */}
+        <Button
+          onClick={() => setIsFilterOpen(true)}
+          className="h-12 gap-2 shadow-lg"
+          size="lg"
+        >
+          <Filter className="h-5 w-5" />
+          Filters
+          {activeFilterCount > 0 && (
+            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs font-medium text-blue-600">
+              {activeFilterCount}
+            </span>
+          )}
+        </Button>
+      </div>
 
       {/* Filter Panel */}
       <FilterPanel isOpen={isFilterOpen} onClose={() => setIsFilterOpen(false)} />
@@ -135,6 +202,31 @@ function HomeContent() {
         onClose={() => setSelectedRetailer(null)}
         userLocation={userLocation}
       />
+
+      {/* Error Message Toast */}
+      {showErrorMessage && pincodeError && (
+        <div className="fixed top-4 right-4 z-50 max-w-md rounded-lg bg-red-50 border border-red-200 p-4 shadow-lg">
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-red-600" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h3 className="text-sm font-medium text-red-800">Failed to load pincodes</h3>
+              <p className="mt-1 text-sm text-red-700">{pincodeError.message}</p>
+            </div>
+            <button
+              onClick={() => setShowErrorMessage(false)}
+              className="flex-shrink-0 text-red-400 hover:text-red-600"
+            >
+              <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

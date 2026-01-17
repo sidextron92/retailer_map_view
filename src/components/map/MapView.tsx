@@ -18,9 +18,11 @@ interface MapViewProps {
   retailers: Retailer[];
   onMarkerClick: (retailer: Retailer) => void;
   onLocationChange?: (location: { latitude: number; longitude: number } | null) => void;
+  onZoomChange?: (zoom: number) => void;
+  onPincodeLoadReady?: (loadPincodes: () => Promise<void>) => void;
 }
 
-export function MapView({ retailers, onMarkerClick, onLocationChange }: MapViewProps) {
+export function MapView({ retailers, onMarkerClick, onLocationChange, onZoomChange, onPincodeLoadReady }: MapViewProps) {
   const [viewState, setViewState] = useState(DEFAULT_MAP_CONFIG.initialViewState);
   const [cursor, setCursor] = useState<string>('auto');
   const mapRef = useRef<MapRef>(null);
@@ -41,11 +43,30 @@ export function MapView({ retailers, onMarkerClick, onLocationChange }: MapViewP
   const [mapBounds, setMapBounds] = useState<any>(null);
 
   // Lazy-load pincode boundaries based on zoom level and viewport
-  const { data: pincodeData, loading: pincodeLoading, cacheStats } = usePincodeBoundaries({
+  const { data: pincodeData, loading: pincodeLoading, error: pincodeError, fetchPincodes, cacheStats } = usePincodeBoundaries({
     zoom: viewState.zoom,
     bounds: mapBounds,
     minZoom: 8, // Only load when zoomed to country/region level (more zoomed out)
   });
+
+  // Notify parent about zoom changes
+  useEffect(() => {
+    onZoomChange?.(viewState.zoom);
+  }, [viewState.zoom, onZoomChange]);
+
+  // Create stable load function that returns a promise
+  const loadPincodesHandler = useCallback(async () => {
+    if (!mapBounds) return;
+    const centerLng = (mapBounds.getWest() + mapBounds.getEast()) / 2;
+    const centerLat = (mapBounds.getSouth() + mapBounds.getNorth()) / 2;
+    await fetchPincodes(centerLng, centerLat);
+  }, [mapBounds, fetchPincodes]);
+
+  // Notify parent about pincode load function (only once when map is ready)
+  useEffect(() => {
+    if (!onPincodeLoadReady || !mapBounds) return;
+    onPincodeLoadReady(loadPincodesHandler);
+  }, [onPincodeLoadReady, mapBounds, loadPincodesHandler]);
 
   // Convert user location to GeoJSON format
   const userLocationGeojson = useMemo(() => {
