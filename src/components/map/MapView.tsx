@@ -13,6 +13,7 @@ import type { Retailer } from '@/types/retailer';
 import { MAPBOX_TOKEN, DEFAULT_MAP_CONFIG, CLUSTER_CONFIG } from '@/lib/mapbox/config';
 import { getMarkerColor } from '@/lib/utils/markers';
 import { usePincodeBoundaries } from '@/hooks/usePincodeBoundaries';
+import { formatDeliveryTAT } from '@/lib/utils/delivery-tat';
 
 interface MapViewProps {
   retailers: Retailer[];
@@ -35,6 +36,7 @@ export function MapView({ retailers, onMarkerClick, onLocationChange, onZoomChan
   const [hoveredPincode, setHoveredPincode] = useState<{
     pincode: string;
     office_name: string;
+    deliverytat?: number | null;
     x: number;
     y: number;
   } | null>(null);
@@ -288,6 +290,7 @@ export function MapView({ retailers, onMarkerClick, onLocationChange, onZoomChan
             setHoveredPincode({
               pincode: pincodeFeature.properties.pincode || '',
               office_name: pincodeFeature.properties.office_name || '',
+              deliverytat: pincodeFeature.properties.deliverytat,
               x: e.point.x,
               y: e.point.y,
             });
@@ -605,6 +608,14 @@ export function MapView({ retailers, onMarkerClick, onLocationChange, onZoomChan
           {hoveredPincode.office_name && (
             <div className="text-xs text-gray-300">{hoveredPincode.office_name}</div>
           )}
+          {/* Delivery TAT */}
+          <div className={`text-xs font-medium mt-1 ${
+            hoveredPincode.deliverytat === null || hoveredPincode.deliverytat === undefined
+              ? 'text-red-400'
+              : 'text-green-400'
+          }`}>
+            {formatDeliveryTAT(hoveredPincode.deliverytat)}
+          </div>
         </div>
       )}
     </div>

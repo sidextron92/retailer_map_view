@@ -32,6 +32,7 @@ interface PincodeFeature {
     state: string;
     fillColor: string;
     outlineColor: string;
+    deliverytat?: number | null;
   };
   geometry: any;
 }
@@ -117,6 +118,7 @@ export function usePincodeBoundaries({
           state: pincode.state,
           fillColor: getPincodeColor(pincode.pincode),
           outlineColor: getPincodeOutlineColor(pincode.pincode),
+          deliverytat: pincode.deliverytat,
         },
         geometry: pincode.geometry,
       }));
