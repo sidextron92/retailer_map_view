@@ -155,7 +155,7 @@ function HomeContent() {
     <main className="h-screen w-full overflow-hidden relative">
       {/* Blue border overlay for ops mode */}
       {isOpsMode && (
-        <div className="absolute inset-0 pointer-events-none z-50 border-4 border-blue-600" />
+        <div className="absolute inset-0 pointer-events-none z-50 border-8 border-blue-600" />
       )}
 
       <MapView
