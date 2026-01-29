@@ -9,6 +9,7 @@ interface UsePincodeBoundariesProps {
   zoom: number;
   bounds?: LngLatBounds | null;
   minZoom?: number;
+  persistCache?: boolean; // If true, cache won't be cleared on zoom out (for TAM mode)
 }
 
 interface UsePincodeBoundariesResult {
@@ -70,6 +71,7 @@ export function usePincodeBoundaries({
   zoom,
   bounds,
   minZoom = 8,
+  persistCache = false,
 }: UsePincodeBoundariesProps): UsePincodeBoundariesResult {
   const [data, setData] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
@@ -148,8 +150,8 @@ export function usePincodeBoundaries({
   }, []);
 
   useEffect(() => {
-    // Clear cache and data if zoom goes below minimum (level 8)
-    if (zoom < minZoom) {
+    // Clear cache and data if zoom goes below minimum (level 8) - unless persistCache is true
+    if (zoom < minZoom && !persistCache) {
       if (cachedPincodes.current.length > 0) {
         console.log('🗑️  Clearing pincode cache (zoomed out below level 8)');
         cachedPincodes.current = [];
@@ -171,7 +173,7 @@ export function usePincodeBoundaries({
     }
 
     previousZoom.current = zoom;
-  }, [zoom, minZoom]);
+  }, [zoom, minZoom, persistCache]);
 
   return {
     data,

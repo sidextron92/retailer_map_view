@@ -2,12 +2,14 @@
 
 import { useState, useMemo, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Filter, MapPin, Loader2 } from 'lucide-react';
+import { Filter, MapPin, Loader2, Plus } from 'lucide-react';
 import { MapView } from '@/components/map/MapView';
 import { RetailerDetailModal } from '@/components/modals/RetailerDetailModal';
 import { FilterPanel } from '@/components/filters/FilterPanel';
+import { AddRetailerSheet } from '@/components/tam/AddRetailerSheet';
 import { useRetailers } from '@/hooks/useRetailers';
 import { useDarkstore } from '@/hooks/useDarkstore';
+import { useTamRetailers } from '@/hooks/useTamRetailers';
 import { useFilterStore } from '@/store/filterStore';
 import { applyFilters, getActiveFilterCount } from '@/lib/utils/filters';
 import { Button } from '@/components/ui/button';
@@ -16,10 +18,11 @@ import type { Retailer } from '@/types/retailer';
 function HomeContent() {
   const searchParams = useSearchParams();
 
-  // Read URL parameters for operations mode and darkstore
+  // Read URL parameters for operations mode, TAM mode, and darkstore
   const mode = searchParams.get('mode');
   const darkstoreParam = searchParams.get('darkstore');
   const isOpsMode = mode === 'ops';
+  const isTamMode = mode === 'tam';
 
   // Read URL parameters for server-side filtering (retailers)
   const urlFilters = useMemo(() => ({
@@ -34,11 +37,18 @@ function HomeContent() {
   // Fetch darkstore location if darkstore parameter is present
   const { darkstore, loading: darkstoreLoading, error: darkstoreError } = useDarkstore(darkstoreParam);
 
+  // Fetch TAM retailers if in TAM mode
+  const { retailers: tamRetailers, refresh: refreshTamRetailers } = useTamRetailers(isTamMode ? darkstoreParam : null);
+
   const [selectedRetailer, setSelectedRetailer] = useState<Retailer | null>(null);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number; accuracy?: number } | null>(null);
   const filters = useFilterStore();
   const activeFilterCount = getActiveFilterCount(filters);
+
+  // TAM mode state
+  const [isAddRetailerSheetOpen, setIsAddRetailerSheetOpen] = useState(false);
+  const [pincodeDataForTam, setPincodeDataForTam] = useState<any>(null);
 
   // Pincode loading states
   const [currentZoom, setCurrentZoom] = useState<number>(0);
@@ -46,6 +56,7 @@ function HomeContent() {
   const [pincodeLoading, setPincodeLoading] = useState(false);
   const [pincodeError, setPincodeError] = useState<Error | null>(null);
   const [showErrorMessage, setShowErrorMessage] = useState(false);
+  const [pincodeDataLoaded, setPincodeDataLoaded] = useState(false);
 
   // Apply filters to retailers
   const filteredRetailers = useMemo(
@@ -57,6 +68,42 @@ function HomeContent() {
   const handlePincodeLoadReady = useCallback((loadFn: () => Promise<void>) => {
     setLoadPincodes(() => loadFn);
   }, []);
+
+  // Handle pincode data loaded status from MapView
+  const handlePincodeDataStatus = useCallback((isLoaded: boolean) => {
+    setPincodeDataLoaded(isLoaded);
+  }, []);
+
+  // Handle pincode data updates from MapView (for TAM mode)
+  const handlePincodeData = useCallback((data: any) => {
+    setPincodeDataForTam(data);
+  }, []);
+
+  // Handle "Add Retailer" button click
+  const handleAddRetailerClick = () => {
+    // Request location permission and enable current location
+    if (!userLocation) {
+      // Trigger geolocation via the GeolocateControl
+      const geolocateButton = document.querySelector('.mapboxgl-ctrl-geolocate');
+      if (geolocateButton) {
+        (geolocateButton as HTMLButtonElement).click();
+      }
+      // Show a message that location is being enabled
+      setTimeout(() => {
+        if (userLocation) {
+          setIsAddRetailerSheetOpen(true);
+        }
+      }, 1000);
+    } else {
+      setIsAddRetailerSheetOpen(true);
+    }
+  };
+
+  // Handle successful retailer submission
+  const handleRetailerAdded = () => {
+    refreshTamRetailers();
+    setIsAddRetailerSheetOpen(false);
+  };
 
   // Auto-hide error message after 5 seconds
   useEffect(() => {
@@ -124,8 +171,35 @@ function HomeContent() {
     );
   }
 
+  // TAM mode error state - requires darkstore parameter
+  if (isTamMode && !darkstoreParam) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-100">
+        <div className="max-w-md rounded-lg bg-white p-8 shadow-lg">
+          <h2 className="mb-4 text-xl font-semibold text-red-600">
+            TAM Mode Error
+          </h2>
+          <p className="mb-4 text-gray-700">
+            TAM mode requires a darkstore location parameter.
+          </p>
+          <div className="rounded-lg bg-yellow-50 p-4">
+            <p className="text-sm text-yellow-800">
+              <strong>Usage:</strong>
+            </p>
+            <p className="mt-2 text-sm text-yellow-700">
+              Add the darkstore parameter to your URL:
+            </p>
+            <code className="mt-2 block rounded bg-yellow-100 p-2 text-xs text-yellow-900">
+              ?mode=tam&darkstore=malda
+            </code>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Empty state
-  if (retailers.length === 0) {
+  if (retailers.length === 0 && !isTamMode) {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-100">
         <div className="max-w-md rounded-lg bg-white p-8 shadow-lg text-center">
@@ -158,20 +232,29 @@ function HomeContent() {
         <div className="absolute inset-0 pointer-events-none z-50 border-8 border-blue-600" />
       )}
 
+      {/* Yellow border overlay for TAM mode */}
+      {isTamMode && (
+        <div className="absolute inset-0 pointer-events-none z-50 border-8 border-yellow-500" />
+      )}
+
       <MapView
-        retailers={filteredRetailers}
+        retailers={isTamMode ? [] : filteredRetailers}
+        tamRetailers={isTamMode ? tamRetailers : []}
         darkstore={darkstore}
         isOpsMode={isOpsMode}
+        isTamMode={isTamMode}
         onMarkerClick={setSelectedRetailer}
         onLocationChange={setUserLocation}
         onZoomChange={setCurrentZoom}
         onPincodeLoadReady={handlePincodeLoadReady}
+        onPincodeDataStatus={handlePincodeDataStatus}
+        onPincodeDataUpdate={handlePincodeData}
       />
 
       {/* Button Group - Fixed at bottom right */}
       <div className="fixed right-4 bottom-4 z-30 flex flex-col gap-2 items-end">
-        {/* Load Pincodes Button - Only visible when zoom >= 10 */}
-        {currentZoom >= 10 && (
+        {/* Load Pincodes Button - Only visible when zoom >= 10 and pincodes not loaded */}
+        {currentZoom >= 10 && !pincodeDataLoaded && (
           <Button
             onClick={handleLoadPincodesClick}
             className="h-9 gap-1.5 shadow-lg text-xs"
@@ -192,20 +275,34 @@ function HomeContent() {
           </Button>
         )}
 
-        {/* Filter Toggle Button */}
-        <Button
-          onClick={() => setIsFilterOpen(true)}
-          className="h-12 gap-2 shadow-lg"
-          size="lg"
-        >
-          <Filter className="h-5 w-5" />
-          Filters
-          {activeFilterCount > 0 && (
-            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs font-medium text-blue-600">
-              {activeFilterCount}
-            </span>
-          )}
-        </Button>
+        {/* Add Retailer Button - Only visible in TAM mode */}
+        {isTamMode && (
+          <Button
+            onClick={handleAddRetailerClick}
+            className="h-12 gap-2 shadow-lg bg-yellow-500 hover:bg-yellow-600"
+            size="lg"
+          >
+            <Plus className="h-5 w-5" />
+            Add Retailer
+          </Button>
+        )}
+
+        {/* Filter Toggle Button - Hidden in TAM mode */}
+        {!isTamMode && (
+          <Button
+            onClick={() => setIsFilterOpen(true)}
+            className="h-12 gap-2 shadow-lg"
+            size="lg"
+          >
+            <Filter className="h-5 w-5" />
+            Filters
+            {activeFilterCount > 0 && (
+              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white text-xs font-medium text-blue-600">
+                {activeFilterCount}
+              </span>
+            )}
+          </Button>
+        )}
       </div>
 
       {/* Filter Panel */}
@@ -242,6 +339,18 @@ function HomeContent() {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Add Retailer Sheet - TAM mode */}
+      {isTamMode && darkstore && (
+        <AddRetailerSheet
+          isOpen={isAddRetailerSheetOpen}
+          onClose={() => setIsAddRetailerSheetOpen(false)}
+          darkstore={darkstore.darkstore}
+          userLocation={userLocation}
+          pincodeData={pincodeDataForTam}
+          onSuccess={handleRetailerAdded}
+        />
       )}
     </main>
   );

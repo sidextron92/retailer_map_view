@@ -11,6 +11,7 @@ import Map, {
 } from 'react-map-gl/mapbox';
 import type { Retailer } from '@/types/retailer';
 import type { Darkstore } from '@/types/darkstore';
+import type { TamRetailer } from '@/types/tam-retailer';
 import { MAPBOX_TOKEN, DEFAULT_MAP_CONFIG, CLUSTER_CONFIG } from '@/lib/mapbox/config';
 import { getMarkerColor } from '@/lib/utils/markers';
 import { usePincodeBoundaries } from '@/hooks/usePincodeBoundaries';
@@ -29,12 +30,16 @@ interface DistanceLine {
 
 interface MapViewProps {
   retailers: Retailer[];
+  tamRetailers?: TamRetailer[];
   darkstore?: Darkstore | null;
   isOpsMode?: boolean;
+  isTamMode?: boolean;
   onMarkerClick: (retailer: Retailer) => void;
-  onLocationChange?: (location: { latitude: number; longitude: number } | null) => void;
+  onLocationChange?: (location: { latitude: number; longitude: number; accuracy?: number } | null) => void;
   onZoomChange?: (zoom: number) => void;
   onPincodeLoadReady?: (loadPincodes: () => Promise<void>) => void;
+  onPincodeDataStatus?: (isLoaded: boolean) => void;
+  onPincodeDataUpdate?: (data: any) => void;
 }
 
 // Color palette for distance lines
@@ -51,7 +56,7 @@ const LINE_COLORS = [
   '#14b8a6', // teal
 ];
 
-export function MapView({ retailers, darkstore, isOpsMode, onMarkerClick, onLocationChange, onZoomChange, onPincodeLoadReady }: MapViewProps) {
+export function MapView({ retailers, tamRetailers = [], darkstore, isOpsMode, isTamMode, onMarkerClick, onLocationChange, onZoomChange, onPincodeLoadReady, onPincodeDataStatus, onPincodeDataUpdate }: MapViewProps) {
   const [viewState, setViewState] = useState(DEFAULT_MAP_CONFIG.initialViewState);
   const [cursor, setCursor] = useState<string>('auto');
   const mapRef = useRef<MapRef>(null);
@@ -60,6 +65,10 @@ export function MapView({ retailers, darkstore, isOpsMode, onMarkerClick, onLoca
   const [showOverlapDialog, setShowOverlapDialog] = useState(false);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [showDarkstorePopup, setShowDarkstorePopup] = useState(false);
+
+  // Track if pincodes have been auto-loaded in TAM mode
+  const tamPincodesAutoLoaded = useRef(false);
+  const tamAutoLoadRetryCount = useRef(0);
 
   // Distance line drawing state (only in ops mode)
   const [distanceLines, setDistanceLines] = useState<DistanceLine[]>([]);
@@ -83,12 +92,25 @@ export function MapView({ retailers, darkstore, isOpsMode, onMarkerClick, onLoca
     zoom: viewState.zoom,
     bounds: mapBounds,
     minZoom: 8, // Only load when zoomed to country/region level (more zoomed out)
+    persistCache: isTamMode, // In TAM mode, keep pincodes visible even when zoomed out
   });
 
   // Notify parent about zoom changes
   useEffect(() => {
     onZoomChange?.(viewState.zoom);
   }, [viewState.zoom, onZoomChange]);
+
+  // Notify parent about pincode data loaded status
+  useEffect(() => {
+    onPincodeDataStatus?.(!!pincodeData);
+  }, [pincodeData, onPincodeDataStatus]);
+
+  // Notify parent about pincode data updates (for TAM mode)
+  useEffect(() => {
+    if (pincodeData) {
+      onPincodeDataUpdate?.(pincodeData);
+    }
+  }, [pincodeData, onPincodeDataUpdate]);
 
   // Create stable load function that returns a promise
   const loadPincodesHandler = useCallback(async () => {
@@ -103,6 +125,65 @@ export function MapView({ retailers, darkstore, isOpsMode, onMarkerClick, onLoca
     if (!onPincodeLoadReady || !mapBounds) return;
     onPincodeLoadReady(loadPincodesHandler);
   }, [onPincodeLoadReady, mapBounds, loadPincodesHandler]);
+
+  // Auto-load pincodes in TAM mode when darkstore is available (with 1 retry)
+  useEffect(() => {
+    if (!isTamMode || !darkstore || !mapLoaded || tamPincodesAutoLoaded.current) {
+      console.log('🟡 TAM Mode auto-load check:', {
+        isTamMode,
+        hasDarkstore: !!darkstore,
+        mapLoaded,
+        alreadyLoaded: tamPincodesAutoLoaded.current
+      });
+      return;
+    }
+
+    // Auto-load pincodes centered on darkstore
+    const autoLoadPincodes = async () => {
+      const maxRetries = 1;
+
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          if (attempt > 0) {
+            console.log(`🟡 TAM Mode: Retrying auto-load (attempt ${attempt + 1}/${maxRetries + 1})`);
+            // Wait 1 second before retrying
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          } else {
+            console.log('🟡 TAM Mode: Auto-loading pincodes for darkstore:', darkstore.darkstore);
+          }
+
+          await fetchPincodes(darkstore.longitude, darkstore.latitude);
+
+          // Success - mark as loaded
+          tamPincodesAutoLoaded.current = true;
+          tamAutoLoadRetryCount.current = 0;
+          console.log('✅ TAM Mode: Pincodes auto-loaded successfully');
+          return;
+        } catch (error) {
+          console.error(`❌ TAM Mode auto-load failed (attempt ${attempt + 1}/${maxRetries + 1}):`, error);
+          tamAutoLoadRetryCount.current = attempt + 1;
+
+          // If this was the last attempt, give up
+          if (attempt === maxRetries) {
+            console.warn('⚠️ TAM Mode: Auto-load failed after retry. User can manually load via CTA.');
+            // Don't mark as loaded so the effect won't run again on re-mount
+            return;
+          }
+        }
+      }
+    };
+
+    autoLoadPincodes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTamMode, darkstore, mapLoaded]);
+
+  // Reset auto-load flag when leaving TAM mode
+  useEffect(() => {
+    if (!isTamMode) {
+      tamPincodesAutoLoaded.current = false;
+      tamAutoLoadRetryCount.current = 0;
+    }
+  }, [isTamMode]);
 
   // Convert user location to GeoJSON format
   const userLocationGeojson = useMemo(() => {
@@ -146,6 +227,28 @@ export function MapView({ retailers, darkstore, isOpsMode, onMarkerClick, onLoca
       })),
     };
   }, [retailers]);
+
+  // Convert TAM retailers to GeoJSON format (purple/magenta color)
+  const tamGeojsonData = useMemo(() => {
+    return {
+      type: 'FeatureCollection' as const,
+      features: tamRetailers.map((tamRetailer) => ({
+        type: 'Feature' as const,
+        properties: {
+          id: tamRetailer.id,
+          name: tamRetailer.shop_name || 'Unnamed Shop',
+          color: '#9333ea', // Purple color for TAM retailers
+          isTamRetailer: true,
+          // Store full tam retailer data for click handling
+          tamRetailer: JSON.stringify(tamRetailer),
+        },
+        geometry: {
+          type: 'Point' as const,
+          coordinates: [tamRetailer.longitude, tamRetailer.latitude],
+        },
+      })),
+    };
+  }, [tamRetailers]);
 
   // Convert distance lines to GeoJSON format
   const distanceLinesGeoJSON = useMemo(() => {
@@ -253,14 +356,14 @@ export function MapView({ retailers, darkstore, isOpsMode, onMarkerClick, onLoca
     }
   }, [isOpsMode]);
 
-  // Handle darkstore marker mouse down - start drawing
+  // Handle darkstore marker mouse down - start drawing (only in ops mode)
   const handleDarkstoreMouseDown = useCallback((e: any) => {
-    if (!isOpsMode || !darkstore) return;
+    if (!isOpsMode || !darkstore || isTamMode) return;
     e.stopPropagation();
     e.preventDefault();
     setIsDrawingLine(true);
     setCurrentLineEnd({ lat: darkstore.latitude, lng: darkstore.longitude });
-  }, [isOpsMode, darkstore]);
+  }, [isOpsMode, darkstore, isTamMode]);
 
   // Handle map mouse move - update line end position
   const handleMapMouseMove = useCallback((e: any) => {
@@ -436,7 +539,7 @@ export function MapView({ retailers, darkstore, isOpsMode, onMarkerClick, onLoca
         maxZoom={20}
         minZoom={3}
         dragRotate={false}
-        interactiveLayerIds={['clusters', 'unclustered-point', 'pincode-fill', 'pincode-outline']}
+        interactiveLayerIds={['clusters', 'unclustered-point', 'tam-retailer-point', 'pincode-fill', 'pincode-outline']}
         onMouseMove={(e) => {
           // Handle distance line drawing
           handleMapMouseMove(e);
@@ -488,8 +591,18 @@ export function MapView({ retailers, darkstore, isOpsMode, onMarkerClick, onLoca
             features: [clickableFeature]
           };
 
+          // Check if it's a TAM retailer
+          if (clickableFeature.layer && clickableFeature.layer.id === 'tam-retailer-point') {
+            // Handle TAM retailer click
+            if (clickableFeature.properties && clickableFeature.properties.tamRetailer) {
+              const tamRetailer = JSON.parse(clickableFeature.properties.tamRetailer);
+              console.log('TAM Retailer clicked:', tamRetailer);
+              // TODO: Show TAM retailer detail modal
+              alert(`TAM Retailer: ${tamRetailer.shop_name || 'Unnamed Shop'}\nPincode: ${tamRetailer.pincode}\nCategories: ${tamRetailer.category_tags.join(', ') || 'None'}`);
+            }
+          }
           // Check if it's a cluster
-          if (clickableFeature.properties && (clickableFeature.properties.cluster || clickableFeature.properties.point_count)) {
+          else if (clickableFeature.properties && (clickableFeature.properties.cluster || clickableFeature.properties.point_count)) {
             e.preventDefault();
             handleClusterClick(modifiedEvent);
           } else if (clickableFeature.layer && clickableFeature.layer.id === 'unclustered-point') {
@@ -509,6 +622,7 @@ export function MapView({ retailers, darkstore, isOpsMode, onMarkerClick, onLoca
             const location = {
               latitude: e.coords.latitude,
               longitude: e.coords.longitude,
+              accuracy: e.coords.accuracy,
             };
             setUserLocation(location);
             onLocationChange?.(location);
@@ -644,6 +758,42 @@ export function MapView({ retailers, darkstore, isOpsMode, onMarkerClick, onLoca
           />
         </Source>
 
+        {/* TAM Retailers Data Source (no clustering, distinct color) */}
+        {isTamMode && tamRetailers.length > 0 && (
+          <Source
+            id="tam-retailers"
+            type="geojson"
+            data={tamGeojsonData}
+          >
+            {/* TAM Retailer markers */}
+            <Layer
+              id="tam-retailer-point"
+              type="circle"
+              paint={{
+                'circle-color': ['get', 'color'],
+                'circle-radius': 14,
+                'circle-stroke-width': 3,
+                'circle-stroke-color': '#ffffff',
+                'circle-opacity': 0.95,
+              }}
+            />
+
+            {/* TAM Marker icons */}
+            <Layer
+              id="tam-retailer-icon"
+              type="symbol"
+              layout={{
+                'icon-image': 'marker-15',
+                'icon-size': 0.9,
+                'icon-allow-overlap': true,
+              }}
+              paint={{
+                'icon-color': '#ffffff',
+              }}
+            />
+          </Source>
+        )}
+
         {/* Pincode Boundaries Layer - Rendered last but placed at bottom of visual stack */}
         {pincodeData && (
           <Source
@@ -713,14 +863,15 @@ export function MapView({ retailers, darkstore, isOpsMode, onMarkerClick, onLoca
             latitude={darkstore.latitude}
             anchor="bottom"
             onClick={(e) => {
-              if (!isOpsMode || isDrawingLine) {
+              // Only allow interaction in ops mode, not in TAM mode
+              if (!isTamMode && (!isOpsMode || isDrawingLine)) {
                 e.originalEvent.stopPropagation();
                 setShowDarkstorePopup(true);
               }
             }}
           >
             <div
-              className="cursor-pointer"
+              className={isTamMode ? "cursor-default" : "cursor-pointer"}
               onMouseDown={handleDarkstoreMouseDown}
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="40px" height="40px" fill="#1e3a8a">
@@ -735,7 +886,9 @@ export function MapView({ retailers, darkstore, isOpsMode, onMarkerClick, onLoca
       <div className="absolute bottom-4 left-4 flex flex-col gap-2">
         <div className="rounded-lg bg-white px-4 py-2 shadow-lg">
           <p className="text-sm font-medium text-gray-700">
-            {retailers.length} {retailers.length === 1 ? 'retailer' : 'retailers'}
+            {isTamMode
+              ? `${tamRetailers.length} TAM ${tamRetailers.length === 1 ? 'retailer' : 'retailers'}`
+              : `${retailers.length} ${retailers.length === 1 ? 'retailer' : 'retailers'}`}
           </p>
         </div>
 
