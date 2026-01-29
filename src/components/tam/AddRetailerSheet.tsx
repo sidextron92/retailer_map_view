@@ -220,6 +220,7 @@ export function AddRetailerSheet({
               ref={fileInputRef}
               type="file"
               accept="image/*"
+              capture="environment"
               onChange={handlePhotoChange}
               className="hidden"
               disabled={uploading}
@@ -250,7 +251,7 @@ export function AddRetailerSheet({
               >
                 <Camera className="h-12 w-12 text-gray-400" />
                 <div className="text-center">
-                  <p className="text-sm font-medium text-gray-700">Take or upload photo</p>
+                  <p className="text-sm font-medium text-gray-700">Capture photo with camera</p>
                   <p className="text-xs text-gray-500">Will be optimized to &lt;1MB</p>
                 </div>
               </button>

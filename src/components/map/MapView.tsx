@@ -35,6 +35,7 @@ interface MapViewProps {
   isOpsMode?: boolean;
   isTamMode?: boolean;
   onMarkerClick: (retailer: Retailer) => void;
+  onTamRetailerClick?: (retailers: TamRetailer[]) => void;
   onLocationChange?: (location: { latitude: number; longitude: number; accuracy?: number } | null) => void;
   onZoomChange?: (zoom: number) => void;
   onPincodeLoadReady?: (loadPincodes: () => Promise<void>) => void;
@@ -56,7 +57,7 @@ const LINE_COLORS = [
   '#14b8a6', // teal
 ];
 
-export function MapView({ retailers, tamRetailers = [], darkstore, isOpsMode, isTamMode, onMarkerClick, onLocationChange, onZoomChange, onPincodeLoadReady, onPincodeDataStatus, onPincodeDataUpdate }: MapViewProps) {
+export function MapView({ retailers, tamRetailers = [], darkstore, isOpsMode, isTamMode, onMarkerClick, onTamRetailerClick, onLocationChange, onZoomChange, onPincodeLoadReady, onPincodeDataStatus, onPincodeDataUpdate }: MapViewProps) {
   const [viewState, setViewState] = useState(DEFAULT_MAP_CONFIG.initialViewState);
   const [cursor, setCursor] = useState<string>('auto');
   const mapRef = useRef<MapRef>(null);
@@ -593,13 +594,33 @@ export function MapView({ retailers, tamRetailers = [], darkstore, isOpsMode, is
 
           // Check if it's a TAM retailer
           if (clickableFeature.layer && clickableFeature.layer.id === 'tam-retailer-point') {
-            // Handle TAM retailer click
-            if (clickableFeature.properties && clickableFeature.properties.tamRetailer) {
-              const tamRetailer = JSON.parse(clickableFeature.properties.tamRetailer);
-              console.log('TAM Retailer clicked:', tamRetailer);
-              // TODO: Show TAM retailer detail modal
-              alert(`TAM Retailer: ${tamRetailer.shop_name || 'Unnamed Shop'}\nPincode: ${tamRetailer.pincode}\nCategories: ${tamRetailer.category_tags.join(', ') || 'None'}`);
-            }
+            if (!mapRef.current || !onTamRetailerClick) return;
+
+            const map = mapRef.current.getMap();
+            const point = e.point;
+
+            // Query all TAM retailers at the clicked point (within a small radius)
+            const tamFeatures = map.queryRenderedFeatures(
+              [
+                [point.x - 10, point.y - 10],
+                [point.x + 10, point.y + 10],
+              ],
+              {
+                layers: ['tam-retailer-point'],
+              }
+            );
+
+            if (!tamFeatures || tamFeatures.length === 0) return;
+
+            // Parse all TAM retailers at this location
+            const tamRetailersAtLocation = tamFeatures
+              .filter((f) => f.properties && f.properties.tamRetailer)
+              .map((f) => JSON.parse(f.properties!.tamRetailer));
+
+            if (tamRetailersAtLocation.length === 0) return;
+
+            // Pass all TAM retailers at this location to parent
+            onTamRetailerClick(tamRetailersAtLocation);
           }
           // Check if it's a cluster
           else if (clickableFeature.properties && (clickableFeature.properties.cluster || clickableFeature.properties.point_count)) {
@@ -641,7 +662,7 @@ export function MapView({ retailers, tamRetailers = [], darkstore, isOpsMode, is
               id="user-location-pulse"
               type="circle"
               paint={{
-                'circle-radius': 12,
+                'circle-radius': 8,
                 'circle-color': '#3B82F6',
                 'circle-opacity': 0.3,
                 'circle-blur': 0.5,
@@ -652,10 +673,10 @@ export function MapView({ retailers, tamRetailers = [], darkstore, isOpsMode, is
               id="user-location-dot"
               type="circle"
               paint={{
-                'circle-radius': 8,
+                'circle-radius': 5,
                 'circle-color': '#3B82F6',
                 'circle-opacity': 0.8,
-                'circle-stroke-width': 2,
+                'circle-stroke-width': 1.5,
                 'circle-stroke-color': '#FFFFFF',
               }}
             />
@@ -664,7 +685,7 @@ export function MapView({ retailers, tamRetailers = [], darkstore, isOpsMode, is
               id="user-location-center"
               type="circle"
               paint={{
-                'circle-radius': 3,
+                'circle-radius': 2,
                 'circle-color': '#FFFFFF',
               }}
             />

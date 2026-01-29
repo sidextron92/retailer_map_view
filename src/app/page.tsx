@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { Filter, MapPin, Loader2, Plus } from 'lucide-react';
 import { MapView } from '@/components/map/MapView';
 import { RetailerDetailModal } from '@/components/modals/RetailerDetailModal';
+import { TamRetailerDetailModal } from '@/components/modals/TamRetailerDetailModal';
 import { FilterPanel } from '@/components/filters/FilterPanel';
 import { AddRetailerSheet } from '@/components/tam/AddRetailerSheet';
 import { useRetailers } from '@/hooks/useRetailers';
@@ -14,6 +15,7 @@ import { useFilterStore } from '@/store/filterStore';
 import { applyFilters, getActiveFilterCount } from '@/lib/utils/filters';
 import { Button } from '@/components/ui/button';
 import type { Retailer } from '@/types/retailer';
+import type { TamRetailer } from '@/types/tam-retailer';
 
 function HomeContent() {
   const searchParams = useSearchParams();
@@ -47,6 +49,7 @@ function HomeContent() {
   const activeFilterCount = getActiveFilterCount(filters);
 
   // TAM mode state
+  const [selectedTamRetailers, setSelectedTamRetailers] = useState<TamRetailer[]>([]);
   const [isAddRetailerSheetOpen, setIsAddRetailerSheetOpen] = useState(false);
   const [pincodeDataForTam, setPincodeDataForTam] = useState<any>(null);
 
@@ -81,20 +84,18 @@ function HomeContent() {
 
   // Handle "Add Retailer" button click
   const handleAddRetailerClick = () => {
-    // Request location permission and enable current location
-    if (!userLocation) {
-      // Trigger geolocation via the GeolocateControl
-      const geolocateButton = document.querySelector('.mapboxgl-ctrl-geolocate');
-      if (geolocateButton) {
-        (geolocateButton as HTMLButtonElement).click();
-      }
-      // Show a message that location is being enabled
+    // Always refresh location to get latest position
+    const geolocateButton = document.querySelector('.mapboxgl-ctrl-geolocate');
+    if (geolocateButton) {
+      // Click the geolocate button to refresh position
+      (geolocateButton as HTMLButtonElement).click();
+
+      // Wait a moment for location update, then open sheet
       setTimeout(() => {
-        if (userLocation) {
-          setIsAddRetailerSheetOpen(true);
-        }
+        setIsAddRetailerSheetOpen(true);
       }, 1000);
     } else {
+      // Fallback: open sheet directly if button not found
       setIsAddRetailerSheetOpen(true);
     }
   };
@@ -103,6 +104,11 @@ function HomeContent() {
   const handleRetailerAdded = () => {
     refreshTamRetailers();
     setIsAddRetailerSheetOpen(false);
+  };
+
+  // Handle TAM retailer marker click
+  const handleTamRetailerClick = (retailers: TamRetailer[]) => {
+    setSelectedTamRetailers(retailers);
   };
 
   // Auto-hide error message after 5 seconds
@@ -244,6 +250,7 @@ function HomeContent() {
         isOpsMode={isOpsMode}
         isTamMode={isTamMode}
         onMarkerClick={setSelectedRetailer}
+        onTamRetailerClick={handleTamRetailerClick}
         onLocationChange={setUserLocation}
         onZoomChange={setCurrentZoom}
         onPincodeLoadReady={handlePincodeLoadReady}
@@ -352,6 +359,13 @@ function HomeContent() {
           onSuccess={handleRetailerAdded}
         />
       )}
+
+      {/* TAM Retailer Detail Modal */}
+      <TamRetailerDetailModal
+        retailers={selectedTamRetailers}
+        isOpen={selectedTamRetailers.length > 0}
+        onClose={() => setSelectedTamRetailers([])}
+      />
     </main>
   );
 }
