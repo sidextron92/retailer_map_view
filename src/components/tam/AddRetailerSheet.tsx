@@ -178,9 +178,9 @@ export function AddRetailerSheet({
       />
 
       {/* Bottom Sheet */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 max-h-[90vh] overflow-y-auto rounded-t-2xl bg-white shadow-2xl">
+      <div className="fixed bottom-0 left-0 right-0 z-50 flex max-h-[90vh] flex-col rounded-t-2xl bg-white shadow-2xl">
         {/* Header */}
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-white px-6 py-4">
+        <div className="flex items-center justify-between border-b bg-white px-6 py-4">
           <h2 className="text-xl font-semibold text-gray-900">Add Retailer</h2>
           <button
             onClick={onClose}
@@ -190,8 +190,8 @@ export function AddRetailerSheet({
           </button>
         </div>
 
-        {/* Content */}
-        <div className="p-6">
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-y-auto p-6">
           {/* Success Message */}
           {success && (
             <div className="mb-6 flex items-center gap-3 rounded-lg bg-green-50 p-4">
@@ -230,30 +230,27 @@ export function AddRetailerSheet({
                 <img
                   src={photoPreview}
                   alt="Shop preview"
-                  className="h-48 w-full rounded-lg object-cover"
+                  className="h-20 w-full rounded-lg object-cover"
                 />
                 <button
                   onClick={() => {
                     setShopPhoto(null);
                     setPhotoPreview(null);
                   }}
-                  className="absolute right-2 top-2 rounded-full bg-red-500 p-2 text-white shadow-lg hover:bg-red-600"
+                  className="absolute right-2 top-2 rounded-full bg-red-500 p-1.5 text-white shadow-lg hover:bg-red-600"
                   disabled={uploading}
                 >
-                  <X className="h-4 w-4" />
+                  <X className="h-3 w-3" />
                 </button>
               </div>
             ) : (
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="flex h-48 w-full flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 hover:bg-gray-100"
+                className="flex h-20 w-full flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 hover:bg-gray-100"
                 disabled={uploading}
               >
-                <Camera className="h-12 w-12 text-gray-400" />
-                <div className="text-center">
-                  <p className="text-sm font-medium text-gray-700">Capture photo with camera</p>
-                  <p className="text-xs text-gray-500">Will be optimized to &lt;1MB</p>
-                </div>
+                <Camera className="h-8 w-8 text-gray-400" />
+                <p className="text-xs font-medium text-gray-700">Capture photo</p>
               </button>
             )}
           </div>
@@ -297,8 +294,6 @@ export function AddRetailerSheet({
 
           {/* Location Data */}
           <div className="mb-6 rounded-lg bg-gray-50 p-4">
-            <h3 className="mb-3 text-sm font-medium text-gray-900">Location Data</h3>
-
             {!userLocation && (
               <p className="text-sm text-red-600">Please enable location to continue</p>
             )}
@@ -306,15 +301,9 @@ export function AddRetailerSheet({
             {userLocation && (
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Latitude:</span>
+                  <span className="text-gray-600">LatLong:</span>
                   <span className="font-mono font-medium text-gray-900">
-                    {userLocation.latitude.toFixed(6)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Longitude:</span>
-                  <span className="font-mono font-medium text-gray-900">
-                    {userLocation.longitude.toFixed(6)}
+                    {userLocation.latitude.toFixed(6)},{userLocation.longitude.toFixed(6)}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -342,6 +331,27 @@ export function AddRetailerSheet({
             )}
           </div>
 
+        </div>
+
+        {/* Sticky Footer with Submit Button */}
+        <div className="border-t bg-white px-6 py-4">
+          {/* Validation Messages */}
+          {!canSubmit && (
+            <div className="mb-3 space-y-1 text-sm text-gray-600">
+              <p className="font-medium">Required to submit:</p>
+              <ul className="list-inside list-disc space-y-1">
+                {!shopPhoto && <li className="text-red-600">Shop photo</li>}
+                {!userLocation && <li className="text-red-600">Location enabled</li>}
+                {userLocation && !locationAccuracyOk && (
+                  <li className="text-red-600">Location accuracy ≤50m</li>
+                )}
+                {userLocation && !detectedPincode && (
+                  <li className="text-red-600">Location within pincode boundaries</li>
+                )}
+              </ul>
+            </div>
+          )}
+
           {/* Submit Button */}
           <Button
             onClick={handleSubmit}
@@ -358,23 +368,6 @@ export function AddRetailerSheet({
               'Submit'
             )}
           </Button>
-
-          {/* Validation Messages */}
-          {!canSubmit && (
-            <div className="mt-4 space-y-1 text-sm text-gray-600">
-              <p className="font-medium">Required to submit:</p>
-              <ul className="list-inside list-disc space-y-1">
-                {!shopPhoto && <li className="text-red-600">Shop photo</li>}
-                {!userLocation && <li className="text-red-600">Location enabled</li>}
-                {userLocation && !locationAccuracyOk && (
-                  <li className="text-red-600">Location accuracy ≤50m</li>
-                )}
-                {userLocation && !detectedPincode && (
-                  <li className="text-red-600">Location within pincode boundaries</li>
-                )}
-              </ul>
-            </div>
-          )}
         </div>
       </div>
     </>

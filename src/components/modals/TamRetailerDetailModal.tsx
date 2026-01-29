@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { X } from 'lucide-react';
 import type { TamRetailer } from '@/types/tam-retailer';
 import { format } from 'date-fns';
@@ -11,6 +12,8 @@ interface TamRetailerDetailModalProps {
 }
 
 export function TamRetailerDetailModal({ retailers, isOpen, onClose }: TamRetailerDetailModalProps) {
+  const [fullSizeImage, setFullSizeImage] = useState<string | null>(null);
+
   if (!isOpen || retailers.length === 0) return null;
 
   return (
@@ -36,24 +39,27 @@ export function TamRetailerDetailModal({ retailers, isOpen, onClose }: TamRetail
               <div
                 key={retailer.id}
                 className={`${
-                  index > 0 ? 'border-t pt-6' : ''
-                } space-y-4`}
+                  index > 0 ? 'border-t pt-4' : ''
+                } space-y-3`}
               >
-                {/* Shop Photo */}
-                <div className="overflow-hidden rounded-lg">
+                {/* Shop Photo - Clickable */}
+                <div
+                  className="overflow-hidden rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                  onClick={() => setFullSizeImage(retailer.shop_photo_url)}
+                >
                   <img
                     src={retailer.shop_photo_url}
                     alt={retailer.shop_name || 'Shop photo'}
-                    className="h-64 w-full object-cover"
+                    className="h-32 w-full object-cover"
                   />
                 </div>
 
                 {/* Shop Details */}
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {/* Shop Name */}
                   <div>
-                    <label className="text-sm font-medium text-gray-500">Shop Name</label>
-                    <p className="text-base font-semibold text-gray-900">
+                    <label className="text-xs font-medium text-gray-500">Shop Name</label>
+                    <p className="text-sm font-semibold text-gray-900">
                       {retailer.shop_name || 'Unnamed Shop'}
                     </p>
                   </div>
@@ -61,12 +67,12 @@ export function TamRetailerDetailModal({ retailers, isOpen, onClose }: TamRetail
                   {/* Categories */}
                   {retailer.category_tags && retailer.category_tags.length > 0 && (
                     <div>
-                      <label className="text-sm font-medium text-gray-500">Categories</label>
-                      <div className="mt-1 flex flex-wrap gap-2">
+                      <label className="text-xs font-medium text-gray-500">Categories</label>
+                      <div className="mt-1 flex flex-wrap gap-1.5">
                         {retailer.category_tags.map((category) => (
                           <span
                             key={category}
-                            className="inline-block rounded-full bg-purple-100 px-3 py-1 text-xs font-medium text-purple-800"
+                            className="inline-block rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-medium text-purple-800"
                           >
                             {category}
                           </span>
@@ -75,49 +81,30 @@ export function TamRetailerDetailModal({ retailers, isOpen, onClose }: TamRetail
                     </div>
                   )}
 
-                  {/* Location Data */}
-                  <div className="grid grid-cols-2 gap-4">
+                  {/* Pincode and LatLong */}
+                  <div className="flex items-baseline gap-4">
                     <div>
-                      <label className="text-sm font-medium text-gray-500">Pincode</label>
-                      <p className="text-base text-gray-900">{retailer.pincode}</p>
+                      <label className="text-xs font-medium text-gray-500">Pincode</label>
+                      <p className="text-sm text-gray-900">{retailer.pincode}</p>
                     </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-500">Darkstore</label>
-                      <p className="text-base text-gray-900">{retailer.darkstore}</p>
-                    </div>
-                  </div>
-
-                  {/* Coordinates */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-sm font-medium text-gray-500">Latitude</label>
-                      <p className="font-mono text-sm text-gray-900">
-                        {retailer.latitude.toFixed(6)}
-                      </p>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-gray-500">Longitude</label>
-                      <p className="font-mono text-sm text-gray-900">
-                        {retailer.longitude.toFixed(6)}
+                    <div className="flex-1">
+                      <label className="text-xs font-medium text-gray-500">LatLong</label>
+                      <p className="font-mono text-xs text-gray-900">
+                        {retailer.latitude.toFixed(6)},{retailer.longitude.toFixed(6)}
+                        {retailer.location_accuracy !== null && (
+                          <span className="ml-2 text-gray-600">
+                            (±{retailer.location_accuracy.toFixed(0)}m)
+                          </span>
+                        )}
                       </p>
                     </div>
                   </div>
-
-                  {/* Accuracy */}
-                  {retailer.location_accuracy !== null && (
-                    <div>
-                      <label className="text-sm font-medium text-gray-500">Location Accuracy</label>
-                      <p className="text-sm text-gray-900">
-                        {retailer.location_accuracy.toFixed(2)} meters
-                      </p>
-                    </div>
-                  )}
 
                   {/* Timestamp */}
                   {retailer.created_at && (
                     <div>
-                      <label className="text-sm font-medium text-gray-500">Captured On</label>
-                      <p className="text-sm text-gray-900">
+                      <label className="text-xs font-medium text-gray-500">Captured</label>
+                      <p className="text-xs text-gray-900">
                         {format(new Date(retailer.created_at), 'PPpp')}
                       </p>
                     </div>
@@ -128,6 +115,33 @@ export function TamRetailerDetailModal({ retailers, isOpen, onClose }: TamRetail
           </div>
         </div>
       </div>
+
+      {/* Full Size Image Modal */}
+      {fullSizeImage && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 p-4"
+          onClick={(e) => {
+            e.stopPropagation();
+            setFullSizeImage(null);
+          }}
+        >
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setFullSizeImage(null);
+            }}
+            className="absolute right-4 top-4 rounded-full bg-white/10 p-2 hover:bg-white/20"
+          >
+            <X className="h-6 w-6 text-white" />
+          </button>
+          <img
+            src={fullSizeImage}
+            alt="Full size shop photo"
+            className="max-h-full max-w-full rounded-lg object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }
