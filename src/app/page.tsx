@@ -2,12 +2,13 @@
 
 import { useState, useMemo, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Filter, MapPin, Loader2, Plus } from 'lucide-react';
+import { Filter, MapPin, Loader2, Plus, BarChart3 } from 'lucide-react';
 import { MapView } from '@/components/map/MapView';
 import { RetailerDetailModal } from '@/components/modals/RetailerDetailModal';
 import { TamRetailerDetailModal } from '@/components/modals/TamRetailerDetailModal';
 import { FilterPanel } from '@/components/filters/FilterPanel';
 import { AddRetailerSheet } from '@/components/tam/AddRetailerSheet';
+import { MarketDataSheet } from '@/components/tam/MarketDataSheet';
 import { useRetailers } from '@/hooks/useRetailers';
 import { useDarkstore } from '@/hooks/useDarkstore';
 import { useTamRetailers } from '@/hooks/useTamRetailers';
@@ -51,6 +52,7 @@ function HomeContent() {
   // TAM mode state
   const [selectedTamRetailers, setSelectedTamRetailers] = useState<TamRetailer[]>([]);
   const [isAddRetailerSheetOpen, setIsAddRetailerSheetOpen] = useState(false);
+  const [isMarketDataSheetOpen, setIsMarketDataSheetOpen] = useState(false);
   const [pincodeDataForTam, setPincodeDataForTam] = useState<any>(null);
 
   // Pincode loading states
@@ -282,6 +284,18 @@ function HomeContent() {
           </Button>
         )}
 
+        {/* Show Market Data Button - Only visible in TAM mode */}
+        {isTamMode && (
+          <Button
+            onClick={() => setIsMarketDataSheetOpen(true)}
+            className="h-9 gap-1.5 shadow-lg text-xs bg-yellow-100 hover:bg-yellow-200 text-yellow-900"
+            size="sm"
+          >
+            <BarChart3 className="h-4 w-4" />
+            Show Market Data
+          </Button>
+        )}
+
         {/* Add Retailer Button - Only visible in TAM mode */}
         {isTamMode && (
           <Button
@@ -357,6 +371,17 @@ function HomeContent() {
           userLocation={userLocation}
           pincodeData={pincodeDataForTam}
           onSuccess={handleRetailerAdded}
+        />
+      )}
+
+      {/* Market Data Sheet - TAM mode */}
+      {isTamMode && darkstore && (
+        <MarketDataSheet
+          isOpen={isMarketDataSheetOpen}
+          onClose={() => setIsMarketDataSheetOpen(false)}
+          darkstore={darkstore.darkstore}
+          userLocation={userLocation}
+          pincodeData={pincodeDataForTam}
         />
       )}
 
