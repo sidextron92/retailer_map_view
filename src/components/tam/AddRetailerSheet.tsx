@@ -42,7 +42,7 @@ export function AddRetailerSheet({
 
   // Check if location accuracy is within threshold
   const locationAccuracyOk = userLocation && userLocation.accuracy !== undefined
-    ? userLocation.accuracy <= 50
+    ? userLocation.accuracy <= 100
     : false;
 
   // Form validation
@@ -314,7 +314,7 @@ export function AddRetailerSheet({
                     }`}
                   >
                     {userLocation.accuracy?.toFixed(2) || 'N/A'} m
-                    {!locationAccuracyOk && ' (must be ≤50m)'}
+                    {!locationAccuracyOk && ' (must be ≤100m)'}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -343,7 +343,7 @@ export function AddRetailerSheet({
                 {!shopPhoto && <li className="text-red-600">Shop photo</li>}
                 {!userLocation && <li className="text-red-600">Location enabled</li>}
                 {userLocation && !locationAccuracyOk && (
-                  <li className="text-red-600">Location accuracy ≤50m</li>
+                  <li className="text-red-600">Location accuracy ≤100m</li>
                 )}
                 {userLocation && !detectedPincode && (
                   <li className="text-red-600">Location within pincode boundaries</li>
