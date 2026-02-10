@@ -27,6 +27,8 @@ export function AddRetailerSheet({
   onSuccess,
 }: AddRetailerSheetProps) {
   const [shopName, setShopName] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [phoneError, setPhoneError] = useState<string | null>(null);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [shopPhoto, setShopPhoto] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -45,21 +47,54 @@ export function AddRetailerSheet({
     ? userLocation.accuracy <= 100
     : false;
 
+  // Validate phone number (only if there's input)
+  const validatePhoneNumber = (phone: string): boolean => {
+    if (!phone) return true; // Optional field
+    const phoneRegex = /^\d{10}$/;
+    return phoneRegex.test(phone);
+  };
+
   // Form validation
   const canSubmit =
     shopPhoto !== null &&
     userLocation !== null &&
     locationAccuracyOk &&
-    detectedPincode !== null;
+    detectedPincode !== null &&
+    (phoneNumber === '' || validatePhoneNumber(phoneNumber));
 
   // Reset form
   const resetForm = () => {
     setShopName('');
+    setPhoneNumber('');
+    setPhoneError(null);
     setSelectedCategories([]);
     setShopPhoto(null);
     setPhotoPreview(null);
     setError(null);
     setSuccess(false);
+  };
+
+  // Handle phone number change
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+
+    // Only allow numeric input
+    if (value && !/^\d*$/.test(value)) {
+      return; // Don't update if non-numeric
+    }
+
+    setPhoneNumber(value);
+
+    // Validate if there's input
+    if (value) {
+      if (value.length !== 10) {
+        setPhoneError('Phone number must be exactly 10 digits');
+      } else {
+        setPhoneError(null);
+      }
+    } else {
+      setPhoneError(null); // Clear error if field is empty
+    }
   };
 
   // Handle photo selection
@@ -133,6 +168,7 @@ export function AddRetailerSheet({
       // Insert into tam_retailers table
       const { error: insertError } = await supabase.from('tam_retailers').insert({
         shop_name: shopName || null,
+        phone_number: phoneNumber || null,
         shop_photo_url: urlData.publicUrl,
         category_tags: selectedCategories,
         latitude: userLocation.latitude,
@@ -267,6 +303,25 @@ export function AddRetailerSheet({
               placeholder="Enter shop name"
               disabled={uploading}
             />
+          </div>
+
+          {/* Phone Number */}
+          <div className="mb-6">
+            <label className="mb-2 block text-sm font-medium text-gray-700">
+              Phone Number <span className="text-gray-400">(Optional)</span>
+            </label>
+            <Input
+              type="tel"
+              value={phoneNumber}
+              onChange={handlePhoneChange}
+              placeholder="Enter 10-digit phone number"
+              maxLength={10}
+              disabled={uploading}
+              className={phoneError ? 'border-red-500' : ''}
+            />
+            {phoneError && (
+              <p className="mt-1 text-sm text-red-600">{phoneError}</p>
+            )}
           </div>
 
           {/* Category Tags */}

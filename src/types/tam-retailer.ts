@@ -1,6 +1,7 @@
 export interface TamRetailer {
   id: string;
   shop_name: string | null;
+  phone_number: string | null;
   shop_photo_url: string;
   category_tags: string[];
   latitude: number;
