@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { X, Upload, Loader2, CheckCircle2, Camera } from 'lucide-react';
+import { X, Loader2, Camera } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/lib/supabase/client';
 import { optimizeImage, validateImageFile } from '@/lib/utils/image-optimizer';
 import { detectPincodeFromLocation } from '@/lib/utils/pincode-detector';
 import { CATEGORY_OPTIONS } from '@/types/tam-retailer';
+import { toast } from 'sonner';
 
 interface AddRetailerSheetProps {
   isOpen: boolean;
@@ -33,8 +34,6 @@ export function AddRetailerSheet({
   const [shopPhoto, setShopPhoto] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isSubmittingRef = useRef(false); // Prevent double-submission race condition
 
@@ -71,8 +70,6 @@ export function AddRetailerSheet({
     setSelectedCategories([]);
     setShopPhoto(null);
     setPhotoPreview(null);
-    setError(null);
-    setSuccess(false);
     isSubmittingRef.current = false; // Reset submission flag
   };
 
@@ -107,12 +104,13 @@ export function AddRetailerSheet({
     // Validate file
     const validation = validateImageFile(file);
     if (!validation.valid) {
-      setError(validation.error || 'Invalid image file');
+      toast.error('Invalid image file', {
+        description: validation.error || 'Please select a valid image file.',
+      });
       return;
     }
 
     setShopPhoto(file);
-    setError(null);
 
     // Create preview
     const reader = new FileReader();
@@ -147,7 +145,6 @@ export function AddRetailerSheet({
 
     try {
       setUploading(true);
-      setError(null);
 
       // Optimize image
       const optimizedBlob = await optimizeImage(shopPhoto);
@@ -194,15 +191,18 @@ export function AddRetailerSheet({
 
       if (insertError) throw insertError;
 
-      // Success!
-      setSuccess(true);
-      setTimeout(() => {
-        resetForm();
-        onSuccess();
-      }, 2000);
+      // Success! Close sheet immediately and show toast
+      resetForm();
+      onClose(); // Close the bottom sheet immediately
+      toast.success('Retailer added successfully!', {
+        description: shopName || 'Shop information has been saved.',
+      });
+      onSuccess(); // Trigger data refresh
     } catch (err: any) {
       console.error('Error submitting retailer:', err);
-      setError(err.message || 'Failed to add retailer');
+      toast.error('Failed to add retailer', {
+        description: err.message || 'Please try again.',
+      });
     } finally {
       setUploading(false);
       isSubmittingRef.current = false; // Reset flag to allow future submissions
@@ -241,25 +241,6 @@ export function AddRetailerSheet({
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto p-6">
-          {/* Success Message */}
-          {success && (
-            <div className="mb-6 flex items-center gap-3 rounded-lg bg-green-50 p-4">
-              <CheckCircle2 className="h-6 w-6 text-green-600" />
-              <div>
-                <p className="font-medium text-green-900">Retailer added successfully!</p>
-                <p className="text-sm text-green-700">Form will reset in a moment...</p>
-              </div>
-            </div>
-          )}
-
-          {/* Error Message */}
-          {error && (
-            <div className="mb-6 rounded-lg bg-red-50 p-4">
-              <p className="text-sm font-medium text-red-900">Error</p>
-              <p className="text-sm text-red-700">{error}</p>
-            </div>
-          )}
-
           {/* Shop Photo */}
           <div className="mb-6">
             <label className="mb-2 block text-sm font-medium text-gray-700">
