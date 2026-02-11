@@ -36,6 +36,7 @@ export function AddRetailerSheet({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isSubmittingRef = useRef(false); // Prevent double-submission race condition
 
   // Detect pincode from user location
   const detectedPincode = userLocation
@@ -72,6 +73,7 @@ export function AddRetailerSheet({
     setPhotoPreview(null);
     setError(null);
     setSuccess(false);
+    isSubmittingRef.current = false; // Reset submission flag
   };
 
   // Handle phone number change
@@ -131,7 +133,17 @@ export function AddRetailerSheet({
 
   // Handle form submission
   const handleSubmit = async () => {
+    // Prevent double-submission: Check if already submitting
+    if (isSubmittingRef.current) {
+      console.warn('Submission already in progress, ignoring duplicate click');
+      return;
+    }
+
+    // Validate form
     if (!canSubmit || !userLocation || !detectedPincode || !shopPhoto) return;
+
+    // Set flag immediately (synchronously) to prevent race condition
+    isSubmittingRef.current = true;
 
     try {
       setUploading(true);
@@ -193,6 +205,7 @@ export function AddRetailerSheet({
       setError(err.message || 'Failed to add retailer');
     } finally {
       setUploading(false);
+      isSubmittingRef.current = false; // Reset flag to allow future submissions
     }
   };
 
