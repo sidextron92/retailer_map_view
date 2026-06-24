@@ -22,6 +22,7 @@ export const CATEGORY_OPTIONS = [
   'Women Westernwear',
   'Men Ethnicwear',
   'Women Ethnicwear',
+  'FMCG'
 ] as const;
 
 export type CategoryOption = typeof CATEGORY_OPTIONS[number];
