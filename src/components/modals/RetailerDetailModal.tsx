@@ -12,7 +12,6 @@ import type { Retailer } from '@/types/retailer';
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,

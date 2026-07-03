@@ -4,6 +4,8 @@
  * Usage: node scripts/verify-pincode-data.js
  */
 
+/* eslint-disable @typescript-eslint/no-require-imports */
+
 const { createClient } = require('@supabase/supabase-js');
 
 // Load environment variables
@@ -26,7 +28,7 @@ async function verifyData() {
     // 1. Check total count
     console.log('📊 Checking total count...');
     const { count, error: countError } = await supabase
-      .from('pincode_boundaries')
+      .from('rmv_pincode_boundaries')
       .select('*', { count: 'exact', head: true });
 
     if (countError) {
@@ -39,7 +41,7 @@ async function verifyData() {
     // 2. Check for UNKNOWN pincodes
     console.log('🔍 Checking for invalid data...');
     const { count: unknownCount } = await supabase
-      .from('pincode_boundaries')
+      .from('rmv_pincode_boundaries')
       .select('*', { count: 'exact', head: true })
       .eq('pincode', 'UNKNOWN');
 
@@ -51,7 +53,7 @@ async function verifyData() {
 
     // 3. Check for empty office names
     const { count: emptyOfficeCount } = await supabase
-      .from('pincode_boundaries')
+      .from('rmv_pincode_boundaries')
       .select('*', { count: 'exact', head: true })
       .or('office_name.is.null,office_name.eq.');
 
@@ -64,7 +66,7 @@ async function verifyData() {
     // 4. Show sample data
     console.log('📋 Sample data (first 5 pincodes):');
     const { data: sampleData, error: sampleError } = await supabase
-      .from('pincode_boundaries')
+      .from('rmv_pincode_boundaries')
       .select('pincode, office_name, district, state')
       .limit(5);
 
@@ -77,50 +79,32 @@ async function verifyData() {
     // 5. Show state distribution
     console.log('\n📍 Pincode distribution by state (top 10):');
     const { data: stateData, error: stateError } = await supabase
-      .rpc('exec_sql', {
-        sql_query: `
-          SELECT state, COUNT(*) as count
-          FROM pincode_boundaries
-          WHERE state IS NOT NULL AND state != ''
-          GROUP BY state
-          ORDER BY count DESC
-          LIMIT 10
-        `
-      });
+      .from('rmv_pincode_boundaries')
+      .select('state');
 
     if (stateError) {
-      // Fallback: use aggregation query
-      console.log('   (Using fallback query method)');
-      const { data: fallbackData } = await supabase
-        .from('pincode_boundaries')
-        .select('state');
+      console.error('❌ Error getting state data:', stateError.message);
+    } else if (stateData) {
+      const stateCounts = stateData.reduce((acc, row) => {
+        if (row.state) {
+          acc[row.state] = (acc[row.state] || 0) + 1;
+        }
+        return acc;
+      }, {});
 
-      if (fallbackData) {
-        const stateCounts = fallbackData.reduce((acc, row) => {
-          if (row.state) {
-            acc[row.state] = (acc[row.state] || 0) + 1;
-          }
-          return acc;
-        }, {});
+      const topStates = Object.entries(stateCounts)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 10);
 
-        const topStates = Object.entries(stateCounts)
-          .sort(([, a], [, b]) => b - a)
-          .slice(0, 10);
-
-        topStates.forEach(([state, count]) => {
-          console.log(`   ${state}: ${count}`);
-        });
-      }
-    } else {
-      stateData?.forEach(row => {
-        console.log(`   ${row.state}: ${row.count}`);
+      topStates.forEach(([state, stateCount]) => {
+        console.log(`   ${state}: ${stateCount}`);
       });
     }
 
     // 6. Test spatial query
     console.log('\n🗺️  Testing spatial query (Delhi region)...');
     const { data: spatialData, error: spatialError } = await supabase
-      .rpc('get_pincodes_in_viewport', {
+      .rpc('rmv_get_pincodes_in_viewport', {
         min_lng: 77.0,
         min_lat: 28.4,
         max_lng: 77.5,
@@ -143,7 +127,7 @@ async function verifyData() {
     // 7. Check geometry validity
     console.log('\n🔍 Checking geometry validity...');
     const { data: geometryCheck, error: geoError } = await supabase
-      .from('pincode_boundaries')
+      .from('rmv_pincode_boundaries')
       .select('id, pincode')
       .is('geometry', null)
       .limit(1);

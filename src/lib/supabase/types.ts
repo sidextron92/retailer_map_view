@@ -15,7 +15,7 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
-      retailers: {
+      rmv_retailers: {
         Row: {
           id: string
           name: string
@@ -23,6 +23,7 @@ export interface Database {
           phone: string | null
           latitude: number
           longitude: number
+          userid: number | null
           state: string | null
           city: string | null
           pincode: string | null
@@ -45,6 +46,7 @@ export interface Database {
           phone?: string | null
           latitude: number
           longitude: number
+          userid?: number | null
           state?: string | null
           city?: string | null
           pincode?: string | null
@@ -67,6 +69,7 @@ export interface Database {
           phone?: string | null
           latitude?: number
           longitude?: number
+          userid?: number | null
           state?: string | null
           city?: string | null
           pincode?: string | null
@@ -83,7 +86,7 @@ export interface Database {
           notes?: string | null
         }
       }
-      retailer_categories: {
+      rmv_retailer_categories: {
         Row: {
           id: number
           name: string
@@ -102,6 +105,153 @@ export interface Database {
           color_hex?: string
           icon_name?: string | null
         }
+      }
+      rmv_pincode_boundaries: {
+        Row: {
+          id: number
+          pincode: string
+          office_name: string | null
+          district: string | null
+          state: string | null
+          geometry: unknown
+          created_at: string | null
+          deliverytat: number | null
+        }
+        Insert: {
+          id?: number
+          pincode: string
+          office_name?: string | null
+          district?: string | null
+          state?: string | null
+          geometry: unknown
+          created_at?: string | null
+          deliverytat?: number | null
+        }
+        Update: {
+          id?: number
+          pincode?: string
+          office_name?: string | null
+          district?: string | null
+          state?: string | null
+          geometry?: unknown
+          created_at?: string | null
+          deliverytat?: number | null
+        }
+      }
+      rmv_darkstore_locations: {
+        Row: {
+          id: string
+          darkstore: string
+          address: string
+          latitude: number
+          longitude: number
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          darkstore: string
+          address: string
+          latitude: number
+          longitude: number
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          darkstore?: string
+          address?: string
+          latitude?: number
+          longitude?: number
+          created_at?: string | null
+          updated_at?: string | null
+        }
+      }
+      rmv_tam_retailers: {
+        Row: {
+          id: string
+          shop_name: string | null
+          phone_number: string | null
+          shop_photo_url: string
+          category_tags: Json | null
+          latitude: number
+          longitude: number
+          location_accuracy: number | null
+          pincode: string
+          darkstore: string
+          user_agent: string | null
+          device_info: Json | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          shop_name?: string | null
+          phone_number?: string | null
+          shop_photo_url: string
+          category_tags?: Json | null
+          latitude: number
+          longitude: number
+          location_accuracy?: number | null
+          pincode: string
+          darkstore: string
+          user_agent?: string | null
+          device_info?: Json | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          shop_name?: string | null
+          phone_number?: string | null
+          shop_photo_url?: string
+          category_tags?: Json | null
+          latitude?: number
+          longitude?: number
+          location_accuracy?: number | null
+          pincode?: string
+          darkstore?: string
+          user_agent?: string | null
+          device_info?: Json | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+      }
+    }
+    Functions: {
+      rmv_get_pincodes_by_radius: {
+        Args: {
+          center_lng: number
+          center_lat: number
+          radius_km: number
+          zoom_level?: number
+        }
+        Returns: {
+          id: number
+          pincode: string
+          office_name: string | null
+          district: string | null
+          state: string | null
+          geometry: unknown
+          deliverytat: number | null
+        }[]
+      }
+      rmv_get_pincodes_in_viewport: {
+        Args: {
+          min_lng: number
+          min_lat: number
+          max_lng: number
+          max_lat: number
+          zoom_level?: number
+        }
+        Returns: {
+          id: number
+          pincode: string
+          office_name: string | null
+          district: string | null
+          state: string | null
+          geometry: unknown
+        }[]
       }
     }
   }

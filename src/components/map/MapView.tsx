@@ -7,11 +7,12 @@ import Map, {
   NavigationControl,
   GeolocateControl,
   Marker,
-  MapRef
 } from 'react-map-gl/mapbox';
+import type { MapRef, LngLatBounds } from 'react-map-gl/mapbox';
 import type { Retailer } from '@/types/retailer';
 import type { Darkstore } from '@/types/darkstore';
 import type { TamRetailer } from '@/types/tam-retailer';
+import type { PincodeFeatureCollection } from '@/lib/utils/pincode-detector';
 import { MAPBOX_TOKEN, DEFAULT_MAP_CONFIG, CLUSTER_CONFIG } from '@/lib/mapbox/config';
 import { getMarkerColor } from '@/lib/utils/markers';
 import { usePincodeBoundaries } from '@/hooks/usePincodeBoundaries';
@@ -40,7 +41,38 @@ interface MapViewProps {
   onZoomChange?: (zoom: number) => void;
   onPincodeLoadReady?: (loadPincodes: () => Promise<void>) => void;
   onPincodeDataStatus?: (isLoaded: boolean) => void;
-  onPincodeDataUpdate?: (data: any) => void;
+  onPincodeDataUpdate?: (data: PincodeFeatureCollection) => void;
+}
+
+interface MapPoint {
+  x: number;
+  y: number;
+}
+
+interface MapFeatureProperties {
+  [key: string]: string | number | boolean | null | undefined;
+}
+
+interface MapFeatureLike {
+  layer?: { id?: string };
+  properties?: MapFeatureProperties | null;
+  geometry?: { coordinates?: unknown };
+}
+
+interface MapMoveEventLike {
+  lngLat: { lng: number; lat: number };
+}
+
+interface MarkerMouseEventLike {
+  stopPropagation: () => void;
+  preventDefault: () => void;
+}
+
+interface ClusterSourceLike {
+  getClusterExpansionZoom: (
+    clusterId: number,
+    callback: (err: Error | null, zoom: number) => void
+  ) => void;
 }
 
 // Color palette for distance lines
@@ -86,10 +118,10 @@ export function MapView({ retailers, tamRetailers = [], darkstore, isOpsMode, is
   } | null>(null);
 
   // Get current map bounds for viewport-based queries
-  const [mapBounds, setMapBounds] = useState<any>(null);
+  const [mapBounds, setMapBounds] = useState<LngLatBounds | null>(null);
 
   // Lazy-load pincode boundaries based on zoom level and viewport
-  const { data: pincodeData, loading: pincodeLoading, error: pincodeError, fetchPincodes, cacheStats } = usePincodeBoundaries({
+  const { data: pincodeData, fetchPincodes } = usePincodeBoundaries({
     zoom: viewState.zoom,
     bounds: mapBounds,
     minZoom: 8, // Only load when zoomed to country/region level (more zoomed out)
@@ -358,7 +390,7 @@ export function MapView({ retailers, tamRetailers = [], darkstore, isOpsMode, is
   }, [isOpsMode]);
 
   // Handle darkstore marker mouse down - start drawing (only in ops mode)
-  const handleDarkstoreMouseDown = useCallback((e: any) => {
+  const handleDarkstoreMouseDown = useCallback((e: MarkerMouseEventLike) => {
     if (!isOpsMode || !darkstore || isTamMode) return;
     e.stopPropagation();
     e.preventDefault();
@@ -367,7 +399,7 @@ export function MapView({ retailers, tamRetailers = [], darkstore, isOpsMode, is
   }, [isOpsMode, darkstore, isTamMode]);
 
   // Handle map mouse move - update line end position
-  const handleMapMouseMove = useCallback((e: any) => {
+  const handleMapMouseMove = useCallback((e: MapMoveEventLike) => {
     if (!isDrawingLine || !darkstore) return;
     const { lng, lat } = e.lngLat;
     setCurrentLineEnd({ lat, lng });
@@ -410,13 +442,15 @@ export function MapView({ retailers, tamRetailers = [], darkstore, isOpsMode, is
   }, []);
 
   // Handle cluster click - zoom to cluster bounds with smooth animation
-  const handleClusterClick = useCallback((event: any) => {
-    const feature = event.features?.[0];
+  const handleClusterClick = useCallback((feature: MapFeatureLike) => {
     if (!feature || !mapRef.current) return;
 
     const map = mapRef.current.getMap();
-    const clusterId = feature.properties.cluster_id;
-    const [longitude, latitude] = feature.geometry.coordinates;
+    const clusterId = Number(feature.properties?.cluster_id);
+    const coordinates = feature.geometry?.coordinates;
+    if (!Array.isArray(coordinates)) return;
+    const [longitude, latitude] = coordinates;
+    if (typeof longitude !== 'number' || typeof latitude !== 'number') return;
 
     // Get current zoom level
     const currentZoom = map.getZoom();
@@ -430,11 +464,11 @@ export function MapView({ retailers, tamRetailers = [], darkstore, isOpsMode, is
     };
 
     // Try to get cluster expansion zoom from source
-    const mapboxSource = map.getSource('retailers') as any;
+    const mapboxSource = map.getSource('retailers') as Partial<ClusterSourceLike> | undefined;
 
     if (mapboxSource && mapboxSource.getClusterExpansionZoom) {
       // Use Mapbox's cluster expansion zoom calculation
-      mapboxSource.getClusterExpansionZoom(clusterId, (err: any, zoom: number) => {
+      mapboxSource.getClusterExpansionZoom(clusterId, (err: Error | null, zoom: number) => {
         if (err) {
           // Fallback: zoom in by 2 levels
           const newZoom = Math.min(currentZoom + 2, 20);
@@ -462,11 +496,10 @@ export function MapView({ retailers, tamRetailers = [], darkstore, isOpsMode, is
 
   // Handle marker click - show details or list if multiple at same location
   const handleMarkerClick = useCallback(
-    (event: any) => {
+    (point: MapPoint) => {
       if (!mapRef.current) return;
 
       const map = mapRef.current.getMap();
-      const point = event.point;
 
       // Query all features at the clicked point (within a small radius)
       const features = map.queryRenderedFeatures(
@@ -484,7 +517,7 @@ export function MapView({ retailers, tamRetailers = [], darkstore, isOpsMode, is
       // Parse all retailers at this location
       const retailersAtLocation = features
         .filter((f) => f.properties && f.properties.retailer)
-        .map((f) => JSON.parse(f.properties!.retailer));
+        .map((f) => JSON.parse(String(f.properties!.retailer)) as Retailer);
 
       if (retailersAtLocation.length === 0) return;
 
@@ -586,12 +619,6 @@ export function MapView({ retailers, tamRetailers = [], darkstore, isOpsMode, is
 
           if (!clickableFeature) return;
 
-          // Create a modified event with only the clickable feature
-          const modifiedEvent = {
-            ...e,
-            features: [clickableFeature]
-          };
-
           // Check if it's a TAM retailer
           if (clickableFeature.layer && clickableFeature.layer.id === 'tam-retailer-point') {
             if (!mapRef.current || !onTamRetailerClick) return;
@@ -615,7 +642,7 @@ export function MapView({ retailers, tamRetailers = [], darkstore, isOpsMode, is
             // Parse all TAM retailers at this location
             const tamRetailersAtLocation = tamFeatures
               .filter((f) => f.properties && f.properties.tamRetailer)
-              .map((f) => JSON.parse(f.properties!.tamRetailer));
+              .map((f) => JSON.parse(String(f.properties!.tamRetailer)) as TamRetailer);
 
             if (tamRetailersAtLocation.length === 0) return;
 
@@ -625,9 +652,9 @@ export function MapView({ retailers, tamRetailers = [], darkstore, isOpsMode, is
           // Check if it's a cluster
           else if (clickableFeature.properties && (clickableFeature.properties.cluster || clickableFeature.properties.point_count)) {
             e.preventDefault();
-            handleClusterClick(modifiedEvent);
+            handleClusterClick(clickableFeature as MapFeatureLike);
           } else if (clickableFeature.layer && clickableFeature.layer.id === 'unclustered-point') {
-            handleMarkerClick(modifiedEvent);
+            handleMarkerClick(e.point);
           }
         }}
         cursor={cursor}

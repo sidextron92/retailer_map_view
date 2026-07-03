@@ -1,3 +1,22 @@
+import type { Feature, FeatureCollection, MultiPolygon, Polygon } from 'geojson';
+
+export type PincodeGeometry = Polygon | MultiPolygon;
+
+export interface PincodeProperties {
+  id?: number;
+  pincode: string;
+  office_name: string;
+  district: string;
+  state: string;
+  fillColor?: string;
+  outlineColor?: string;
+  deliverytat?: number | null;
+}
+
+export type PincodeFeature = Feature<Polygon | MultiPolygon, PincodeProperties>;
+
+export type PincodeFeatureCollection = FeatureCollection<Polygon | MultiPolygon, PincodeProperties>;
+
 /**
  * Detects the pincode from user's location by checking which pincode boundary contains the point
  * Uses point-in-polygon algorithm
@@ -5,7 +24,7 @@
 export function detectPincodeFromLocation(
   latitude: number,
   longitude: number,
-  pincodeData: any
+  pincodeData: PincodeFeatureCollection | null
 ): string | null {
   if (!pincodeData || !pincodeData.features) {
     return null;
@@ -24,14 +43,14 @@ export function detectPincodeFromLocation(
 /**
  * Check if a point is inside a polygon or multipolygon
  */
-function isPointInPolygon(lat: number, lng: number, geometry: any): boolean {
+function isPointInPolygon(lat: number, lng: number, geometry: PincodeGeometry): boolean {
   if (!geometry) return false;
 
   if (geometry.type === 'Polygon') {
-    return isPointInPolygonRings(lat, lng, geometry.coordinates);
+    return isPointInPolygonRings(lat, lng, geometry.coordinates as number[][][]);
   } else if (geometry.type === 'MultiPolygon') {
     // Check each polygon in the multipolygon
-    for (const polygon of geometry.coordinates) {
+    for (const polygon of geometry.coordinates as number[][][][]) {
       if (isPointInPolygonRings(lat, lng, polygon)) {
         return true;
       }

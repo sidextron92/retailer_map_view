@@ -1,166 +1,133 @@
+#!/usr/bin/env node
+
+/* eslint-disable @typescript-eslint/no-require-imports */
+
 /**
- * Script to import India pincode GeoJSON data into Supabase
+ * Import India pincode GeoJSON data into the prefixed Supabase PostGIS table.
  *
- * Usage: node scripts/import-pincodes.js
- *
- * Make sure to:
- * 1. Run migration 003_create_pincode_boundaries.sql first
- * 2. Set SUPABASE_URL and SUPABASE_SERVICE_KEY in .env.local
+ * Required env:
+ * - SUPABASE_ACCESS_TOKEN: Supabase personal access token
+ * - SUPABASE_PROJECT_REF: Target project ref. Defaults to reqFlow.
  */
 
 const fs = require('fs');
 const path = require('path');
-const { createClient } = require('@supabase/supabase-js');
 
-// Load environment variables
 require('dotenv').config({ path: '.env.local' });
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
+const SUPABASE_ACCESS_TOKEN = process.env.SUPABASE_ACCESS_TOKEN;
+const SUPABASE_PROJECT_REF = process.env.SUPABASE_PROJECT_REF || 'bsprnfjpqraesvhwdtgx';
+const GEOJSON_PATH = path.join(__dirname, '../public/All_India_pincode_Boundary-19312.geojson');
+const BATCH_SIZE = 50;
 
-if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
-  console.error('Error: Missing Supabase credentials in .env.local');
-  console.error('Required: NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_KEY');
+if (!SUPABASE_ACCESS_TOKEN) {
+  console.error('Error: Missing SUPABASE_ACCESS_TOKEN');
   process.exit(1);
 }
 
-// Create Supabase client with service key (bypasses RLS)
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+function sqlString(value) {
+  if (value === null || value === undefined) return 'NULL';
+  return `'${String(value).replace(/'/g, "''")}'`;
+}
 
-const GEOJSON_PATH = path.join(__dirname, '../public/All_India_pincode_Boundary-19312.geojson');
-const BATCH_SIZE = 50; // Smaller batches for better error handling
+async function runSql(query) {
+  const response = await fetch(
+    `https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_REF}/database/query`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${SUPABASE_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ query }),
+    }
+  );
 
-async function importPincodes() {
-  console.log('🚀 Starting pincode import...\n');
-
-  // Read GeoJSON file
-  console.log('📖 Reading GeoJSON file...');
-  const geojsonData = JSON.parse(fs.readFileSync(GEOJSON_PATH, 'utf8'));
-  const features = geojsonData.features;
-
-  console.log(`✅ Loaded ${features.length} pincode features\n`);
-
-  // Show sample data from first feature for verification
-  if (features.length > 0) {
-    const sampleProps = features[0].properties || {};
-    console.log('📋 Sample data from first feature:');
-    console.log(`   Pincode: ${sampleProps.Pincode || sampleProps.pincode || 'N/A'}`);
-    console.log(`   Office Name: ${sampleProps.Office_Name || sampleProps.office_name || 'N/A'}`);
-    console.log(`   District: ${sampleProps.Division || sampleProps.district || 'N/A'}`);
-    console.log(`   State: ${sampleProps.Circle || sampleProps.state || 'N/A'}`);
-    console.log(`   Geometry Type: ${features[0].geometry?.type || 'N/A'}\n`);
+  const text = await response.text();
+  let body;
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch {
+    body = text;
   }
 
-  // Process in batches
+  if (!response.ok) {
+    throw new Error(`SQL request failed (${response.status}): ${JSON.stringify(body)}`);
+  }
+
+  return body;
+}
+
+function featureToValues(feature) {
+  const props = feature.properties || {};
+  const pincode = (props.Pincode || props.pincode || props.PIN || 'UNKNOWN').toString();
+  const officeName = (props.Office_Name || props.office_name || '').toString();
+  const district = (props.Division || props.district || props.DISTRICT || '').toString();
+  const state = (props.Circle || props.state || props.STATE || '').toString();
+  const geometryJson = JSON.stringify(feature.geometry);
+
+  return `(
+    ${sqlString(pincode)},
+    ${sqlString(officeName)},
+    ${sqlString(district)},
+    ${sqlString(state)},
+    ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON(${sqlString(geometryJson)}), 4326))
+  )`;
+}
+
+async function importPincodes() {
+  console.log('Starting pincode import into rmv_pincode_boundaries...');
+  console.log(`Project ref: ${SUPABASE_PROJECT_REF}`);
+
+  const geojsonData = JSON.parse(fs.readFileSync(GEOJSON_PATH, 'utf8'));
+  const features = geojsonData.features || [];
   const totalBatches = Math.ceil(features.length / BATCH_SIZE);
   let successCount = 0;
   let errorCount = 0;
+
+  console.log(`Loaded ${features.length} pincode features`);
 
   for (let i = 0; i < features.length; i += BATCH_SIZE) {
     const batch = features.slice(i, i + BATCH_SIZE);
     const batchNum = Math.floor(i / BATCH_SIZE) + 1;
 
-    console.log(`📦 Processing batch ${batchNum}/${totalBatches} (${batch.length} features)...`);
-
-    // Show sample from first batch for verification
-    if (batchNum === 1 && batch.length > 0) {
-      const firstFeature = batch[0];
-      const props = firstFeature.properties || {};
-      const pincode = (props.Pincode || props.pincode || props.PIN || 'UNKNOWN').toString();
-      const officeName = (props.Office_Name || props.office_name || '').toString();
-      console.log(`   → First pincode in batch: ${pincode} - ${officeName}`);
-    }
-
     try {
-      // Build SQL INSERT statement with ST_GeomFromGeoJSON
-      const values = batch.map((feature, idx) => {
-        const props = feature.properties || {};
-        const pincode = (props.Pincode || props.pincode || props.PIN || 'UNKNOWN').toString().replace(/'/g, "''");
-        const officeName = (props.Office_Name || props.office_name || '').toString().replace(/'/g, "''");
-        const district = (props.Division || props.district || props.DISTRICT || '').toString().replace(/'/g, "''");
-        const state = (props.Circle || props.state || props.STATE || '').toString().replace(/'/g, "''");
-
-        // Escape single quotes in GeoJSON string
-        const geometryJson = JSON.stringify(feature.geometry).replace(/'/g, "''");
-
-        return `(
-          '${pincode}',
-          '${officeName}',
-          '${district}',
-          '${state}',
-          ST_Multi(ST_GeomFromGeoJSON('${geometryJson}'))
-        )`;
-      }).join(',\n');
-
-      const sql = `
-        INSERT INTO pincode_boundaries (pincode, office_name, district, state, geometry)
+      const values = batch.map(featureToValues).join(',\n');
+      await runSql(`
+        INSERT INTO public.rmv_pincode_boundaries (pincode, office_name, district, state, geometry)
         VALUES ${values}
-      `;
+      `);
+      successCount += batch.length;
+      console.log(`Batch ${batchNum}/${totalBatches} inserted (${successCount}/${features.length})`);
+    } catch {
+      console.log(`Batch ${batchNum}/${totalBatches} failed, retrying individually`);
 
-      const { error } = await supabase.rpc('exec_sql', { sql_query: sql });
-
-      if (error) {
-        // Fallback: Try inserting one by one to identify problematic features
-        console.log('⚠️  Batch insert failed, trying individual inserts...');
-
-        for (const feature of batch) {
+      for (const feature of batch) {
+        try {
+          await runSql(`
+            INSERT INTO public.rmv_pincode_boundaries (pincode, office_name, district, state, geometry)
+            VALUES ${featureToValues(feature)}
+          `);
+          successCount++;
+        } catch (singleError) {
           const props = feature.properties || {};
-          const pincode = (props.Pincode || props.pincode || props.PIN || 'UNKNOWN').toString().replace(/'/g, "''");
-          const officeName = (props.Office_Name || props.office_name || '').toString().replace(/'/g, "''");
-          const district = (props.Division || props.district || props.DISTRICT || '').toString().replace(/'/g, "''");
-          const state = (props.Circle || props.state || props.STATE || '').toString().replace(/'/g, "''");
-          const geometryJson = JSON.stringify(feature.geometry).replace(/'/g, "''");
-
-          const singleSql = `
-            INSERT INTO pincode_boundaries (pincode, office_name, district, state, geometry)
-            VALUES (
-              '${pincode}',
-              '${officeName}',
-              '${district}',
-              '${state}',
-              ST_Multi(ST_GeomFromGeoJSON('${geometryJson}'))
-            )
-          `;
-
-          const { error: singleError } = await supabase.rpc('exec_sql', { sql_query: singleSql });
-
-          if (singleError) {
-            console.error(`  ❌ Failed to insert pincode ${pincode}:`, singleError.message);
-            errorCount++;
-          } else {
-            successCount++;
-          }
+          const pincode = props.Pincode || props.pincode || props.PIN || 'UNKNOWN';
+          console.error(`Failed to insert pincode ${pincode}:`, singleError.message);
+          errorCount++;
         }
-      } else {
-        successCount += batch.length;
-        console.log(`✅ Batch ${batchNum} inserted successfully`);
       }
-
-      // Add small delay to avoid rate limiting
-      await new Promise(resolve => setTimeout(resolve, 200));
-
-    } catch (err) {
-      console.error(`❌ Error in batch ${batchNum}:`, err.message);
-      errorCount += batch.length;
     }
+
+    await new Promise((resolve) => setTimeout(resolve, 200));
   }
 
-  console.log('\n📊 Import Summary:');
-  console.log(`   ✅ Success: ${successCount} features`);
-  console.log(`   ❌ Failed: ${errorCount} features`);
-  console.log(`   📈 Total: ${features.length} features`);
-
-  if (successCount > 0) {
-    console.log('\n🎉 Import completed! Pincode boundaries are now in Supabase.');
-    console.log('\n📝 Next steps:');
-    console.log('   1. Verify data in Supabase Dashboard → Table Editor → pincode_boundaries');
-    console.log('   2. Test the map at zoom level 12+');
-    console.log('   3. Optionally remove the large GeoJSON file from /public folder');
-  }
+  console.log('Import summary:');
+  console.log(`Success: ${successCount}`);
+  console.log(`Failed: ${errorCount}`);
+  console.log(`Total: ${features.length}`);
 }
 
-// Run import
-importPincodes().catch(err => {
-  console.error('💥 Fatal error:', err);
+importPincodes().catch((error) => {
+  console.error('Fatal error:', error);
   process.exit(1);
 });

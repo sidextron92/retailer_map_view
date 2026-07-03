@@ -10,7 +10,7 @@ export interface TamRetailer {
   pincode: string;
   darkstore: string;
   user_agent: string | null;
-  device_info: any | null;
+  device_info: Record<string, unknown> | null;
   created_at: string | null;
   updated_at: string | null;
 }

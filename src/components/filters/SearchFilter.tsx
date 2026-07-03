@@ -33,7 +33,7 @@ export function SearchFilter() {
       </div>
       {localValue && (
         <p className="text-xs text-gray-500">
-          Searching for "{localValue}"
+          Searching for &quot;{localValue}&quot;
         </p>
       )}
     </div>

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import type { LngLatBounds } from 'react-map-gl/mapbox';
 import { getPincodeColor, getPincodeOutlineColor } from '@/lib/utils/pincode-colors';
+import type { PincodeFeature, PincodeFeatureCollection, PincodeGeometry } from '@/lib/utils/pincode-detector';
 
 interface UsePincodeBoundariesProps {
   zoom: number;
@@ -13,7 +14,7 @@ interface UsePincodeBoundariesProps {
 }
 
 interface UsePincodeBoundariesResult {
-  data: any | null;
+  data: PincodeFeatureCollection | null;
   loading: boolean;
   error: Error | null;
   fetchPincodes: (centerLng: number, centerLat: number) => Promise<void>;
@@ -23,40 +24,22 @@ interface UsePincodeBoundariesResult {
   };
 }
 
-interface PincodeFeature {
-  type: 'Feature';
-  properties: {
-    id?: number;
-    pincode: string;
-    office_name: string;
-    district: string;
-    state: string;
-    fillColor: string;
-    outlineColor: string;
-    deliverytat?: number | null;
-  };
-  geometry: any;
+interface PincodeRpcRow {
+  id: number;
+  pincode: string;
+  office_name: string;
+  district: string;
+  state: string;
+  geometry: PincodeGeometry;
+  deliverytat: number | null;
 }
 
-/**
- * Calculate distance between two points (Haversine formula)
- * Returns distance in kilometers
- */
-function haversineDistance(
-  lat1: number,
-  lng1: number,
-  lat2: number,
-  lng2: number
-): number {
-  const R = 6371; // Earth's radius in km
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLng / 2) * Math.sin(dLng / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
+function getErrorMessage(err: unknown, fallback: string) {
+  if (err instanceof Error) return err.message;
+  if (err && typeof err === 'object' && 'message' in err) {
+    return String((err as { message?: unknown }).message || fallback);
+  }
+  return fallback;
 }
 
 /**
@@ -69,11 +52,10 @@ function haversineDistance(
  */
 export function usePincodeBoundaries({
   zoom,
-  bounds,
   minZoom = 8,
   persistCache = false,
 }: UsePincodeBoundariesProps): UsePincodeBoundariesResult {
-  const [data, setData] = useState<any | null>(null);
+  const [data, setData] = useState<PincodeFeatureCollection | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
@@ -100,7 +82,7 @@ export function usePincodeBoundaries({
 
       // Call Supabase RPC function
       const { data: pincodeData, error: fetchError } = await supabase
-        .rpc('get_pincodes_by_radius', {
+        .rpc('rmv_get_pincodes_by_radius', {
           center_lng: centerLng,
           center_lat: centerLat,
           radius_km: 70,
@@ -110,7 +92,7 @@ export function usePincodeBoundaries({
       if (fetchError) throw fetchError;
 
       // Convert to features with colors
-      const features: PincodeFeature[] = (pincodeData || []).map((pincode: any) => ({
+      const features: PincodeFeature[] = ((pincodeData || []) as PincodeRpcRow[]).map((pincode) => ({
         type: 'Feature' as const,
         properties: {
           id: pincode.id,
@@ -139,9 +121,9 @@ export function usePincodeBoundaries({
       console.log(`📍 Cache center: (${centerLat.toFixed(3)}, ${centerLng.toFixed(3)})`);
 
       setData(geojson);
-    } catch (err: any) {
-      const error = err instanceof Error ? err : new Error('Failed to fetch pincode boundaries');
-      console.error('❌ Error fetching pincodes:', error);
+    } catch (err: unknown) {
+      const error = new Error(getErrorMessage(err, 'Failed to fetch pincode boundaries'));
+      console.error('❌ Error fetching pincodes:', JSON.stringify(err, null, 2));
       setError(error);
       throw error; // Rethrow so parent can handle it
     } finally {

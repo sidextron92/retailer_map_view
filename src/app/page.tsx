@@ -17,13 +17,31 @@ import { applyFilters, getActiveFilterCount } from '@/lib/utils/filters';
 import { Button } from '@/components/ui/button';
 import type { Retailer } from '@/types/retailer';
 import type { TamRetailer } from '@/types/tam-retailer';
+import type { PincodeFeatureCollection } from '@/lib/utils/pincode-detector';
 
 function HomeContent() {
   const searchParams = useSearchParams();
 
-  // Read URL parameters for operations mode, TAM mode, and darkstore
-  const mode = searchParams.get('mode');
-  const darkstoreParam = searchParams.get('darkstore');
+  // Read URL parameters for operations mode, TAM mode, and darkstore.
+  // Also tolerate shared links like ?mode=tam?darkstore=Agra.
+  const { mode, darkstoreParam } = useMemo(() => {
+    const rawMode = searchParams.get('mode');
+    const malformedQueryIndex = rawMode?.indexOf('?') ?? -1;
+
+    if (rawMode && malformedQueryIndex !== -1) {
+      const nestedParams = new URLSearchParams(rawMode.slice(malformedQueryIndex + 1));
+
+      return {
+        mode: rawMode.slice(0, malformedQueryIndex),
+        darkstoreParam: searchParams.get('darkstore') ?? nestedParams.get('darkstore'),
+      };
+    }
+
+    return {
+      mode: rawMode,
+      darkstoreParam: searchParams.get('darkstore'),
+    };
+  }, [searchParams]);
   const isOpsMode = mode === 'ops';
   const isTamMode = mode === 'tam';
 
@@ -38,7 +56,7 @@ function HomeContent() {
   const { retailers, loading, error } = useRetailers(urlFilters);
 
   // Fetch darkstore location if darkstore parameter is present
-  const { darkstore, loading: darkstoreLoading, error: darkstoreError } = useDarkstore(darkstoreParam);
+  const { darkstore } = useDarkstore(darkstoreParam);
 
   // Fetch TAM retailers if in TAM mode
   const { retailers: tamRetailers, refresh: refreshTamRetailers } = useTamRetailers(isTamMode ? darkstoreParam : null);
@@ -53,7 +71,7 @@ function HomeContent() {
   const [selectedTamRetailers, setSelectedTamRetailers] = useState<TamRetailer[]>([]);
   const [isAddRetailerSheetOpen, setIsAddRetailerSheetOpen] = useState(false);
   const [isMarketDataSheetOpen, setIsMarketDataSheetOpen] = useState(false);
-  const [pincodeDataForTam, setPincodeDataForTam] = useState<any>(null);
+  const [pincodeDataForTam, setPincodeDataForTam] = useState<PincodeFeatureCollection | null>(null);
 
   // Pincode loading states
   const [currentZoom, setCurrentZoom] = useState<number>(0);
@@ -80,7 +98,7 @@ function HomeContent() {
   }, []);
 
   // Handle pincode data updates from MapView (for TAM mode)
-  const handlePincodeData = useCallback((data: any) => {
+  const handlePincodeData = useCallback((data: PincodeFeatureCollection) => {
     setPincodeDataForTam(data);
   }, []);
 

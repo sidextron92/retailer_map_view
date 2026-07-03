@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { X, Loader2, BarChart3 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { detectPincodeFromLocation } from '@/lib/utils/pincode-detector';
+import type { PincodeFeatureCollection } from '@/lib/utils/pincode-detector';
 
 interface PincodeData {
   pincode: string;
@@ -15,7 +16,7 @@ interface MarketDataSheetProps {
   onClose: () => void;
   darkstore: string;
   userLocation: { latitude: number; longitude: number; accuracy?: number } | null;
-  pincodeData: any;
+  pincodeData: PincodeFeatureCollection | null;
 }
 
 export function MarketDataSheet({
@@ -43,9 +44,9 @@ export function MarketDataSheet({
         setLoading(true);
         setError(null);
 
-        // Fetch all tam_retailers for this darkstore
+        // Fetch all migrated TAM retailers for this darkstore
         const { data, error: fetchError } = await supabase
-          .from('tam_retailers')
+          .from('rmv_tam_retailers')
           .select('pincode')
           .ilike('darkstore', darkstore);
 

@@ -24,7 +24,7 @@ export function useDarkstore(darkstoreName?: string | null) {
         setError(null);
 
         const { data, error: fetchError } = await supabase
-          .from('darkstore_locations')
+          .from('rmv_darkstore_locations')
           .select('*')
           .ilike('darkstore', darkstoreName!)
           .single();

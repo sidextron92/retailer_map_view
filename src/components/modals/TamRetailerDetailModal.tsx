@@ -47,6 +47,7 @@ export function TamRetailerDetailModal({ retailers, isOpen, onClose }: TamRetail
                   className="overflow-hidden rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
                   onClick={() => setFullSizeImage(retailer.shop_photo_url)}
                 >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={retailer.shop_photo_url}
                     alt={retailer.shop_name || 'Shop photo'}
@@ -134,6 +135,7 @@ export function TamRetailerDetailModal({ retailers, isOpen, onClose }: TamRetail
           >
             <X className="h-6 w-6 text-white" />
           </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={fullSizeImage}
             alt="Full size shop photo"

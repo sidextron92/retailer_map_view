@@ -4,6 +4,14 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import type { TamRetailer } from '@/types/tam-retailer';
 
+function getErrorMessage(err: unknown, fallback: string) {
+  if (err instanceof Error) return err.message;
+  if (err && typeof err === 'object' && 'message' in err) {
+    return String((err as { message?: unknown }).message || fallback);
+  }
+  return fallback;
+}
+
 export function useTamRetailers(darkstore?: string | null) {
   const [retailers, setRetailers] = useState<TamRetailer[]>([]);
   const [loading, setLoading] = useState(false);
@@ -24,7 +32,7 @@ export function useTamRetailers(darkstore?: string | null) {
         setError(null);
 
         const { data, error: fetchError } = await supabase
-          .from('tam_retailers')
+          .from('rmv_tam_retailers')
           .select('*')
           .ilike('darkstore', darkstore!)
           .order('created_at', { ascending: false });
@@ -33,8 +41,8 @@ export function useTamRetailers(darkstore?: string | null) {
 
         setRetailers(data || []);
       } catch (err) {
-        console.error('Error fetching TAM retailers:', err);
-        setError(err instanceof Error ? err : new Error('Failed to fetch TAM retailers'));
+        console.error('Error fetching TAM retailers:', JSON.stringify(err, null, 2));
+        setError(new Error(getErrorMessage(err, 'Failed to fetch TAM retailers')));
         setRetailers([]);
       } finally {
         setLoading(false);
@@ -53,7 +61,7 @@ export function useTamRetailers(darkstore?: string | null) {
       setError(null);
 
       const { data, error: fetchError } = await supabase
-        .from('tam_retailers')
+        .from('rmv_tam_retailers')
         .select('*')
         .ilike('darkstore', darkstore)
         .order('created_at', { ascending: false });
@@ -62,8 +70,8 @@ export function useTamRetailers(darkstore?: string | null) {
 
       setRetailers(data || []);
     } catch (err) {
-      console.error('Error refreshing TAM retailers:', err);
-      setError(err instanceof Error ? err : new Error('Failed to refresh TAM retailers'));
+      console.error('Error refreshing TAM retailers:', JSON.stringify(err, null, 2));
+      setError(new Error(getErrorMessage(err, 'Failed to refresh TAM retailers')));
     } finally {
       setLoading(false);
     }

@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { supabase } from '@/lib/supabase/client';
 import { optimizeImage, validateImageFile } from '@/lib/utils/image-optimizer';
 import { detectPincodeFromLocation } from '@/lib/utils/pincode-detector';
+import type { PincodeFeatureCollection } from '@/lib/utils/pincode-detector';
 import { CATEGORY_OPTIONS } from '@/types/tam-retailer';
 import { toast } from 'sonner';
 
@@ -15,7 +16,7 @@ interface AddRetailerSheetProps {
   onClose: () => void;
   darkstore: string;
   userLocation: { latitude: number; longitude: number; accuracy?: number } | null;
-  pincodeData: any;
+  pincodeData: PincodeFeatureCollection | null;
   onSuccess: () => void;
 }
 
@@ -151,8 +152,8 @@ export function AddRetailerSheet({
 
       // Upload to Supabase Storage
       const fileName = `${darkstore}_${Date.now()}.webp`;
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('tam-shop-photos')
+      const { error: uploadError } = await supabase.storage
+        .from('rmv_tam-shop-photos')
         .upload(fileName, optimizedBlob, {
           contentType: 'image/webp',
           upsert: false,
@@ -162,7 +163,7 @@ export function AddRetailerSheet({
 
       // Get public URL
       const { data: urlData } = supabase.storage
-        .from('tam-shop-photos')
+        .from('rmv_tam-shop-photos')
         .getPublicUrl(fileName);
 
       if (!urlData.publicUrl) throw new Error('Failed to get public URL');
@@ -174,8 +175,8 @@ export function AddRetailerSheet({
         language: navigator.language,
       };
 
-      // Insert into tam_retailers table
-      const { error: insertError } = await supabase.from('tam_retailers').insert({
+      // Insert into the migrated TAM retailers table
+      const { error: insertError } = await supabase.from('rmv_tam_retailers').insert({
         shop_name: shopName || null,
         phone_number: phoneNumber || null,
         shop_photo_url: urlData.publicUrl,
@@ -198,10 +199,10 @@ export function AddRetailerSheet({
         description: shopName || 'Shop information has been saved.',
       });
       onSuccess(); // Trigger data refresh
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error submitting retailer:', err);
       toast.error('Failed to add retailer', {
-        description: err.message || 'Please try again.',
+        description: err instanceof Error ? err.message : 'Please try again.',
       });
     } finally {
       setUploading(false);
@@ -257,6 +258,7 @@ export function AddRetailerSheet({
             />
             {photoPreview ? (
               <div className="relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={photoPreview}
                   alt="Shop preview"

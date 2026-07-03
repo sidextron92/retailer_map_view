@@ -80,7 +80,7 @@ export function getMarkerIcon(retailer: Retailer): string {
 }
 
 /**
- * Update status colors from database (retailer_categories table)
+ * Update status colors from database (rmv_retailer_categories table)
  */
 export function updateStatusColors(categories: RetailerCategory[]) {
   categories.forEach((cat) => {

@@ -30,7 +30,7 @@ export function useRetailers(filters?: RetailerFilters) {
         while (hasMore) {
           // Build query with filters
           let query = supabase
-            .from('retailers')
+            .from('rmv_retailers')
             .select('*');
 
           // Apply server-side filters (case-insensitive)

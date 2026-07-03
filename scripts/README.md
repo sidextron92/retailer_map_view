@@ -6,7 +6,7 @@ This directory contains utility scripts for managing pincode boundary data.
 
 ### 1. `import-pincodes.js`
 
-**Purpose:** Import India pincode GeoJSON data into Supabase PostGIS database
+**Purpose:** Import India pincode GeoJSON data into the target Supabase `rmv_pincode_boundaries` PostGIS table.
 
 **Usage:**
 ```bash
@@ -14,31 +14,23 @@ node scripts/import-pincodes.js
 ```
 
 **Prerequisites:**
-- Migration `003_create_pincode_boundaries.sql` must be run first
-- `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` in `.env.local`
+- Target project already has the `rmv_pincode_boundaries` table and PostGIS enabled
+- `SUPABASE_ACCESS_TOKEN` in your environment or `.env.local`
+- Optional `SUPABASE_PROJECT_REF`; defaults to the reqFlow target project
 - GeoJSON file at `/public/All_India_pincode_Boundary-19312.geojson`
 
 **What it does:**
 - Reads 86MB GeoJSON file containing ~19,000 pincode boundaries
-- Imports data in batches of 50 features
+- Imports data into `rmv_pincode_boundaries` in batches of 50 features
 - Converts geometries to PostGIS MultiPolygon format
-- Shows progress and sample data during import
+- Uses the Supabase Management SQL API instead of the legacy `exec_sql` RPC
 - Handles errors with fallback to individual inserts
 
 **Output:**
 ```
-🚀 Starting pincode import...
-✅ Loaded 19312 pincode features
-
-📋 Sample data from first feature:
-   Pincode: 110001
-   Office Name: Connaught Place
-   District: New Delhi
-   State: Delhi
-
-📦 Processing batch 1/387 (50 features)...
-   → First pincode in batch: 110001 - Connaught Place
-✅ Batch 1 inserted successfully
+Starting pincode import into rmv_pincode_boundaries...
+Loaded 19312 pincode features
+Batch 1/387 inserted (50/19312)
 ...
 ```
 
@@ -56,11 +48,11 @@ node scripts/verify-pincode-data.js
 ```
 
 **What it does:**
-- Checks total count of imported pincodes
+- Checks total count of imported pincodes in `rmv_pincode_boundaries`
 - Verifies no UNKNOWN or invalid pincodes
 - Shows sample data from database
 - Displays state distribution
-- Tests spatial queries (viewport-based fetching)
+- Tests spatial queries through `rmv_get_pincodes_in_viewport`
 - Validates geometry columns
 
 **Output:**
@@ -85,7 +77,7 @@ node scripts/verify-pincode-data.js
 ## Typical Workflow
 
 ### Initial Setup
-1. Run migration: `supabase db push` or via Supabase Dashboard
+1. Run the prefixed target schema migration
 2. Import data: `node scripts/import-pincodes.js`
 3. Verify import: `node scripts/verify-pincode-data.js`
 
@@ -94,7 +86,7 @@ If you need to re-import (e.g., after fixing data issues):
 
 ```sql
 -- Clear existing data (run in Supabase SQL Editor)
-TRUNCATE TABLE pincode_boundaries;
+TRUNCATE TABLE public.rmv_pincode_boundaries;
 ```
 
 Then re-run:
@@ -108,11 +100,11 @@ node scripts/verify-pincode-data.js
 ## Troubleshooting
 
 **"Missing Supabase credentials"**
-- Check `.env.local` has `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_KEY`
+- Check `.env.local` or your shell has `SUPABASE_ACCESS_TOKEN`
 - Ensure no spaces around `=` sign
 
-**"relation 'pincode_boundaries' does not exist"**
-- Run migration first (Step 1 in PINCODE_SETUP.md)
+**"relation 'rmv_pincode_boundaries' does not exist"**
+- Run the prefixed target schema migration first
 
 **"Geometry type does not match"**
 - This should be handled automatically with `ST_Multi()`
@@ -128,8 +120,8 @@ node scripts/verify-pincode-data.js
 
 ```env
 # .env.local
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_KEY=your_service_role_key_here
+SUPABASE_ACCESS_TOKEN=your_supabase_access_token
+SUPABASE_PROJECT_REF=bsprnfjpqraesvhwdtgx
 ```
 
-Get service key from: Supabase Dashboard → Settings → API → service_role key
+Create an access token from Supabase Dashboard → Account → Access Tokens.
