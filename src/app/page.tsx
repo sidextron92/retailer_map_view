@@ -32,13 +32,13 @@ function HomeContent() {
       const nestedParams = new URLSearchParams(rawMode.slice(malformedQueryIndex + 1));
 
       return {
-        mode: rawMode.slice(0, malformedQueryIndex),
+        mode: rawMode.slice(0, malformedQueryIndex).toLowerCase(),
         darkstoreParam: searchParams.get('darkstore') ?? nestedParams.get('darkstore'),
       };
     }
 
     return {
-      mode: rawMode,
+      mode: rawMode?.toLowerCase() ?? null,
       darkstoreParam: searchParams.get('darkstore'),
     };
   }, [searchParams]);
