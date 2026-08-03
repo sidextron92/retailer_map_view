@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { X, Loader2, Camera } from 'lucide-react';
+import { X, Loader2, Camera, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/lib/supabase/client';
@@ -16,8 +16,10 @@ interface AddRetailerSheetProps {
   onClose: () => void;
   darkstore: string;
   userLocation: { latitude: number; longitude: number; accuracy?: number } | null;
+  manualLocation: { latitude: number; longitude: number } | null;
   pincodeData: PincodeFeatureCollection | null;
   onSuccess: () => void;
+  onRequestManualPin: () => void;
 }
 
 export function AddRetailerSheet({
@@ -25,8 +27,10 @@ export function AddRetailerSheet({
   onClose,
   darkstore,
   userLocation,
+  manualLocation,
   pincodeData,
   onSuccess,
+  onRequestManualPin,
 }: AddRetailerSheetProps) {
   const [shopName, setShopName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -38,15 +42,20 @@ export function AddRetailerSheet({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isSubmittingRef = useRef(false); // Prevent double-submission race condition
 
-  // Detect pincode from user location
-  const detectedPincode = userLocation
-    ? detectPincodeFromLocation(userLocation.latitude, userLocation.longitude, pincodeData)
+  // Effective location: manual override takes precedence
+  const effectiveLocation = manualLocation ?? userLocation;
+
+  // Detect pincode from effective location
+  const detectedPincode = effectiveLocation
+    ? detectPincodeFromLocation(effectiveLocation.latitude, effectiveLocation.longitude, pincodeData)
     : null;
 
-  // Check if location accuracy is within threshold
-  const locationAccuracyOk = userLocation && userLocation.accuracy !== undefined
-    ? userLocation.accuracy <= 100
-    : false;
+  // Check if location accuracy is within threshold (only for auto-detected)
+  const locationAccuracyOk = manualLocation
+    ? true
+    : userLocation && userLocation.accuracy !== undefined
+      ? userLocation.accuracy <= 200
+      : false;
 
   // Validate phone number (only if there's input)
   const validatePhoneNumber = (phone: string): boolean => {
@@ -58,7 +67,7 @@ export function AddRetailerSheet({
   // Form validation
   const canSubmit =
     shopPhoto !== null &&
-    userLocation !== null &&
+    effectiveLocation !== null &&
     locationAccuracyOk &&
     detectedPincode !== null &&
     (phoneNumber === '' || validatePhoneNumber(phoneNumber));
@@ -139,7 +148,7 @@ export function AddRetailerSheet({
     }
 
     // Validate form
-    if (!canSubmit || !userLocation || !detectedPincode || !shopPhoto) return;
+    if (!canSubmit || !effectiveLocation || !detectedPincode || !shopPhoto) return;
 
     // Set flag immediately (synchronously) to prevent race condition
     isSubmittingRef.current = true;
@@ -175,15 +184,19 @@ export function AddRetailerSheet({
         language: navigator.language,
       };
 
+      // Determine location metadata based on source
+      const isManual = !!manualLocation;
+
       // Insert into the migrated TAM retailers table
       const { error: insertError } = await supabase.from('rmv_tam_retailers').insert({
         shop_name: shopName || null,
         phone_number: phoneNumber || null,
         shop_photo_url: urlData.publicUrl,
         category_tags: selectedCategories,
-        latitude: userLocation.latitude,
-        longitude: userLocation.longitude,
-        location_accuracy: userLocation.accuracy || null,
+        latitude: effectiveLocation.latitude,
+        longitude: effectiveLocation.longitude,
+        location_accuracy: isManual ? 9999 : (userLocation?.accuracy ?? null),
+        location_source: isManual ? 'manual' : 'auto',
         pincode: detectedPincode,
         darkstore: darkstore,
         user_agent: navigator.userAgent,
@@ -345,18 +358,31 @@ export function AddRetailerSheet({
 
           {/* Location Data */}
           <div className="mb-6 rounded-lg bg-gray-50 p-4">
-            {!userLocation && (
+            {!effectiveLocation && (
               <p className="text-sm text-red-600">Please enable location to continue</p>
             )}
 
-            {userLocation && (
+            {effectiveLocation && (
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-600">LatLong:</span>
                   <span className="font-mono font-medium text-gray-900">
-                    {userLocation.latitude.toFixed(6)},{userLocation.longitude.toFixed(6)}
+                    {effectiveLocation.latitude.toFixed(6)},{effectiveLocation.longitude.toFixed(6)}
                   </span>
                 </div>
+
+                {/* Source badge */}
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Source:</span>
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                    manualLocation
+                      ? 'bg-blue-100 text-blue-800'
+                      : 'bg-green-100 text-green-800'
+                  }`}>
+                    {manualLocation ? 'Manually placed' : 'Auto-detected'}
+                  </span>
+                </div>
+
                 <div className="flex justify-between">
                   <span className="text-gray-600">Accuracy:</span>
                   <span
@@ -364,10 +390,13 @@ export function AddRetailerSheet({
                       locationAccuracyOk ? 'text-green-600' : 'text-red-600'
                     }`}
                   >
-                    {userLocation.accuracy?.toFixed(2) || 'N/A'} m
-                    {!locationAccuracyOk && ' (must be ≤100m)'}
+                    {manualLocation
+                      ? 'N/A (manual)'
+                      : `${userLocation?.accuracy?.toFixed(2) ?? 'N/A'} m`}
+                    {!locationAccuracyOk && !manualLocation && ' (must be ≤200m)'}
                   </span>
                 </div>
+
                 <div className="flex justify-between">
                   <span className="text-gray-600">Pincode:</span>
                   <span
@@ -378,6 +407,24 @@ export function AddRetailerSheet({
                     {detectedPincode || 'Not detected'}
                   </span>
                 </div>
+              </div>
+            )}
+
+            {/* Manual pin placement CTA when accuracy is poor */}
+            {!manualLocation && userLocation && !locationAccuracyOk && (
+              <div className="mt-3">
+                <p className="mb-2 text-xs text-red-600">
+                  GPS accuracy is too low to auto-detect the shop location.
+                </p>
+                <Button
+                  onClick={onRequestManualPin}
+                  variant="outline"
+                  className="w-full gap-2 border-blue-500 text-blue-600 hover:bg-blue-50"
+                  size="sm"
+                >
+                  <MapPin className="h-4 w-4" />
+                  Place Pin on Map
+                </Button>
               </div>
             )}
           </div>
@@ -392,11 +439,11 @@ export function AddRetailerSheet({
               <p className="font-medium">Required to submit:</p>
               <ul className="list-inside list-disc space-y-1">
                 {!shopPhoto && <li className="text-red-600">Shop photo</li>}
-                {!userLocation && <li className="text-red-600">Location enabled</li>}
-                {userLocation && !locationAccuracyOk && (
-                  <li className="text-red-600">Location accuracy ≤100m</li>
+                {!effectiveLocation && <li className="text-red-600">Location enabled</li>}
+                {effectiveLocation && !locationAccuracyOk && (
+                  <li className="text-red-600">Location accuracy ≤200m or manual pin</li>
                 )}
-                {userLocation && !detectedPincode && (
+                {effectiveLocation && !detectedPincode && (
                   <li className="text-red-600">Location within pincode boundaries</li>
                 )}
               </ul>

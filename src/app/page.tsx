@@ -73,6 +73,10 @@ function HomeContent() {
   const [isMarketDataSheetOpen, setIsMarketDataSheetOpen] = useState(false);
   const [pincodeDataForTam, setPincodeDataForTam] = useState<PincodeFeatureCollection | null>(null);
 
+  // Pin placement state (for low-accuracy GPS fallback in TAM mode)
+  const [isPinPlacementMode, setIsPinPlacementMode] = useState(false);
+  const [manualLocation, setManualLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+
   // Pincode loading states
   const [currentZoom, setCurrentZoom] = useState<number>(0);
   const [loadPincodes, setLoadPincodes] = useState<(() => Promise<void>) | null>(null);
@@ -124,6 +128,7 @@ function HomeContent() {
   const handleRetailerAdded = () => {
     refreshTamRetailers();
     setIsAddRetailerSheetOpen(false);
+    setManualLocation(null); // Reset manual location for next use
   };
 
   // Handle TAM retailer marker click
@@ -269,6 +274,7 @@ function HomeContent() {
         darkstore={darkstore}
         isOpsMode={isOpsMode}
         isTamMode={isTamMode}
+        isPinPlacementMode={isPinPlacementMode}
         onMarkerClick={setSelectedRetailer}
         onTamRetailerClick={handleTamRetailerClick}
         onLocationChange={setUserLocation}
@@ -276,6 +282,15 @@ function HomeContent() {
         onPincodeLoadReady={handlePincodeLoadReady}
         onPincodeDataStatus={handlePincodeDataStatus}
         onPincodeDataUpdate={handlePincodeData}
+        onPinPlaced={(lat, lng) => {
+          setManualLocation({ latitude: lat, longitude: lng });
+          setIsPinPlacementMode(false);
+          setIsAddRetailerSheetOpen(true);
+        }}
+        onPinPlacementCancel={() => {
+          setIsPinPlacementMode(false);
+          setIsAddRetailerSheetOpen(true);
+        }}
       />
 
       {/* Button Group - Fixed at bottom right */}
@@ -384,11 +399,19 @@ function HomeContent() {
       {isTamMode && darkstore && (
         <AddRetailerSheet
           isOpen={isAddRetailerSheetOpen}
-          onClose={() => setIsAddRetailerSheetOpen(false)}
+          onClose={() => {
+            setIsAddRetailerSheetOpen(false);
+            setManualLocation(null);
+          }}
           darkstore={darkstore.darkstore}
           userLocation={userLocation}
+          manualLocation={manualLocation}
           pincodeData={pincodeDataForTam}
           onSuccess={handleRetailerAdded}
+          onRequestManualPin={() => {
+            setIsAddRetailerSheetOpen(false);
+            setIsPinPlacementMode(true);
+          }}
         />
       )}
 

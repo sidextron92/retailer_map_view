@@ -97,6 +97,11 @@ export function TamRetailerDetailModal({ retailers, isOpen, onClose }: TamRetail
                             (±{retailer.location_accuracy.toFixed(0)}m)
                           </span>
                         )}
+                        {retailer.location_source === 'manual' && (
+                          <span className="ml-1.5 inline-flex items-center rounded bg-blue-100 px-1 py-0.5 text-[10px] font-medium text-blue-800">
+                            Manual
+                          </span>
+                        )}
                       </p>
                     </div>
                   </div>

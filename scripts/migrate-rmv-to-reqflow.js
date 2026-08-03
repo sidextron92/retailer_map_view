@@ -281,6 +281,7 @@ CREATE TABLE IF NOT EXISTS public.rmv_tam_retailers (
   longitude DECIMAL(11, 8) NOT NULL,
   geolocation GEOGRAPHY(POINT, 4326),
   location_accuracy DECIMAL(10, 2),
+  location_source TEXT DEFAULT 'auto',
   pincode VARCHAR(10) NOT NULL,
   darkstore VARCHAR(255) NOT NULL,
   user_agent TEXT,

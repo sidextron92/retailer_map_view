@@ -177,6 +177,7 @@ export interface Database {
           latitude: number
           longitude: number
           location_accuracy: number | null
+          location_source: string | null
           pincode: string
           darkstore: string
           user_agent: string | null
@@ -193,6 +194,7 @@ export interface Database {
           latitude: number
           longitude: number
           location_accuracy?: number | null
+          location_source?: string | null
           pincode: string
           darkstore: string
           user_agent?: string | null
@@ -209,6 +211,7 @@ export interface Database {
           latitude?: number
           longitude?: number
           location_accuracy?: number | null
+          location_source?: string | null
           pincode?: string
           darkstore?: string
           user_agent?: string | null

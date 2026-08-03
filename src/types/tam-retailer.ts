@@ -7,6 +7,7 @@ export interface TamRetailer {
   latitude: number;
   longitude: number;
   location_accuracy: number | null;
+  location_source: 'auto' | 'manual' | null;
   pincode: string;
   darkstore: string;
   user_agent: string | null;

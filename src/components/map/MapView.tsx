@@ -35,6 +35,7 @@ interface MapViewProps {
   darkstore?: Darkstore | null;
   isOpsMode?: boolean;
   isTamMode?: boolean;
+  isPinPlacementMode?: boolean;
   onMarkerClick: (retailer: Retailer) => void;
   onTamRetailerClick?: (retailers: TamRetailer[]) => void;
   onLocationChange?: (location: { latitude: number; longitude: number; accuracy?: number } | null) => void;
@@ -42,6 +43,8 @@ interface MapViewProps {
   onPincodeLoadReady?: (loadPincodes: () => Promise<void>) => void;
   onPincodeDataStatus?: (isLoaded: boolean) => void;
   onPincodeDataUpdate?: (data: PincodeFeatureCollection) => void;
+  onPinPlaced?: (latitude: number, longitude: number) => void;
+  onPinPlacementCancel?: () => void;
 }
 
 interface MapPoint {
@@ -89,7 +92,7 @@ const LINE_COLORS = [
   '#14b8a6', // teal
 ];
 
-export function MapView({ retailers, tamRetailers = [], darkstore, isOpsMode, isTamMode, onMarkerClick, onTamRetailerClick, onLocationChange, onZoomChange, onPincodeLoadReady, onPincodeDataStatus, onPincodeDataUpdate }: MapViewProps) {
+export function MapView({ retailers, tamRetailers = [], darkstore, isOpsMode, isTamMode, isPinPlacementMode, onMarkerClick, onTamRetailerClick, onLocationChange, onZoomChange, onPincodeLoadReady, onPincodeDataStatus, onPincodeDataUpdate, onPinPlaced, onPinPlacementCancel }: MapViewProps) {
   const [viewState, setViewState] = useState(DEFAULT_MAP_CONFIG.initialViewState);
   const [cursor, setCursor] = useState<string>('auto');
   const mapRef = useRef<MapRef>(null);
@@ -533,6 +536,24 @@ export function MapView({ retailers, tamRetailers = [], darkstore, isOpsMode, is
     [onMarkerClick]
   );
 
+  // Memoized move handler to prevent infinite re-render loops
+  const handleMove = useCallback((evt: { viewState: typeof viewState }) => {
+    setViewState(evt.viewState);
+    // Update bounds for pincode queries
+    if (mapRef.current) {
+      setMapBounds(mapRef.current.getBounds());
+    }
+  }, []);
+
+  // Memoized load handler
+  const handleLoad = useCallback(() => {
+    setMapLoaded(true);
+    // Set initial bounds
+    if (mapRef.current) {
+      setMapBounds(mapRef.current.getBounds());
+    }
+  }, []);
+
   if (!MAPBOX_TOKEN) {
     return (
       <div className="flex h-full items-center justify-center bg-gray-100">
@@ -553,20 +574,8 @@ export function MapView({ retailers, tamRetailers = [], darkstore, isOpsMode, is
       <Map
         ref={mapRef}
         {...viewState}
-        onMove={(evt) => {
-          setViewState(evt.viewState);
-          // Update bounds for pincode queries
-          if (mapRef.current) {
-            setMapBounds(mapRef.current.getBounds());
-          }
-        }}
-        onLoad={() => {
-          setMapLoaded(true);
-          // Set initial bounds
-          if (mapRef.current) {
-            setMapBounds(mapRef.current.getBounds());
-          }
-        }}
+        onMove={handleMove}
+        onLoad={handleLoad}
         mapboxAccessToken={MAPBOX_TOKEN}
         mapStyle={DEFAULT_MAP_CONFIG.mapStyle}
         style={{ width: '100%', height: '100%' }}
@@ -1121,6 +1130,54 @@ export function MapView({ retailers, tamRetailers = [], darkstore, isOpsMode, is
             </div>
           </div>
         </div>
+      )}
+
+      {/* Pin Placement Mode Overlays */}
+      {isPinPlacementMode && (
+        <>
+          {/* Top instruction banner */}
+          <div className="absolute top-4 left-4 right-4 z-50">
+            <div className="rounded-lg bg-gray-900/90 px-4 py-3 text-center text-white shadow-lg backdrop-blur-sm">
+              <p className="text-sm font-medium">
+                Pan / zoom so the crosshair sits on the exact shop front, then tap Confirm
+              </p>
+            </div>
+          </div>
+
+          {/* Center crosshair */}
+          <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center">
+            <div className="relative h-12 w-12">
+              {/* Horizontal line */}
+              <div className="absolute left-1/2 top-1/2 h-0.5 w-8 -translate-x-1/2 -translate-y-1/2 bg-red-600" />
+              {/* Vertical line */}
+              <div className="absolute left-1/2 top-1/2 h-8 w-0.5 -translate-x-1/2 -translate-y-1/2 bg-red-600" />
+              {/* Center dot */}
+              <div className="absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-red-600 ring-2 ring-white" />
+            </div>
+          </div>
+
+          {/* Sticky bottom bar with Cancel / Confirm */}
+          <div className="absolute bottom-4 left-4 right-4 z-50">
+            <div className="flex gap-3">
+              <button
+                onClick={() => onPinPlacementCancel?.()}
+                className="flex-1 rounded-lg bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-lg ring-1 ring-gray-200 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (!mapRef.current) return;
+                  const center = mapRef.current.getMap().getCenter();
+                  onPinPlaced?.(center.lat, center.lng);
+                }}
+                className="flex-1 rounded-lg bg-blue-600 px-4 py-3 text-sm font-medium text-white shadow-lg hover:bg-blue-700"
+              >
+                Confirm Location
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
