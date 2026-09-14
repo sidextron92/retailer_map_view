@@ -210,6 +210,19 @@ function HomeContent() {
     setEditedMarketPolygon(polygon);
   }, []);
 
+  // Called when mapbox-gl-draw mode changes (e.g. Escape exits draw/edit mode)
+  const handleMarketModeChange = useCallback((mode: string) => {
+    // If the user exits draw_polygon without completing a feature, show the Draw Market CTA again
+    if (mode !== 'draw_polygon' && drawingMarket && !pendingMarketPolygon) {
+      setDrawingMarket(false);
+    }
+    // If the user exits direct_select while editing, cancel the edit
+    if (mode !== 'direct_select' && editingMarketId) {
+      setEditingMarketId(null);
+      setEditedMarketPolygon(null);
+    }
+  }, [drawingMarket, pendingMarketPolygon, editingMarketId]);
+
   // Save a newly drawn market
   const handleSaveNewMarket = useCallback(async () => {
     if (!pendingMarketPolygon || !newMarketName.trim()) return;
@@ -473,6 +486,7 @@ function HomeContent() {
         onMarketDelete={() => {
           // Deletion is handled through the market modal UI
         }}
+        onMarketModeChange={handleMarketModeChange}
       />
 
       {/* Button Group - Fixed at bottom right */}

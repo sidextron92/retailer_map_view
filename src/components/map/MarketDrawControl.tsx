@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import MapboxDraw from '@mapbox/mapbox-gl-draw';
 import { useControl, useMap } from 'react-map-gl/mapbox';
 import type { ControlPosition } from 'react-map-gl/mapbox';
-import type { DrawCreateEvent, DrawUpdateEvent, DrawDeleteEvent } from '@mapbox/mapbox-gl-draw';
+import type { DrawCreateEvent, DrawUpdateEvent, DrawDeleteEvent, DrawModeChangeEvent } from '@mapbox/mapbox-gl-draw';
 import type { Polygon, FeatureCollection } from 'geojson';
 
 interface MarketDrawControlProps {
@@ -16,6 +16,7 @@ interface MarketDrawControlProps {
   onUpdate?: (featureId: string, polygon: Polygon) => void;
   onDelete?: (featureId: string) => void;
   onSelectionChange?: (featureId: string | null) => void;
+  onModeChange?: (mode: string) => void;
 }
 
 function polygonFeatureCollectionToDrawFeatures(
@@ -40,15 +41,16 @@ export function MarketDrawControl({
   onUpdate,
   onDelete,
   onSelectionChange,
+  onModeChange,
 }: MarketDrawControlProps) {
   const [isReady, setIsReady] = useState(false);
   const mapRef = useMap().current;
 
   // Keep callbacks accessible inside stable event listeners
-  const callbacksRef = useRef({ onCreate, onUpdate, onDelete, onSelectionChange });
+  const callbacksRef = useRef({ onCreate, onUpdate, onDelete, onSelectionChange, onModeChange });
   useEffect(() => {
-    callbacksRef.current = { onCreate, onUpdate, onDelete, onSelectionChange };
-  }, [onCreate, onUpdate, onDelete, onSelectionChange]);
+    callbacksRef.current = { onCreate, onUpdate, onDelete, onSelectionChange, onModeChange };
+  }, [onCreate, onUpdate, onDelete, onSelectionChange, onModeChange]);
 
   const draw = useControl(
     () => {
@@ -131,16 +133,22 @@ export function MarketDrawControl({
       callbacksRef.current.onSelectionChange?.(selected[0] ?? null);
     };
 
+    const handleModeChange = (e: DrawModeChangeEvent) => {
+      callbacksRef.current.onModeChange?.(e.mode);
+    };
+
     map.on('draw.create', handleCreate);
     map.on('draw.update', handleUpdate);
     map.on('draw.delete', handleDelete);
     map.on('draw.selectionchange', handleSelectionChange);
+    map.on('draw.modechange', handleModeChange);
 
     return () => {
       map.off('draw.create', handleCreate);
       map.off('draw.update', handleUpdate);
       map.off('draw.delete', handleDelete);
       map.off('draw.selectionchange', handleSelectionChange);
+      map.off('draw.modechange', handleModeChange);
     };
   }, [draw, mapRef, isReady]);
 

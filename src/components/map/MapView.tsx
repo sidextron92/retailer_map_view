@@ -59,6 +59,7 @@ interface MapViewProps {
   onMarketCreate?: (polygon: Polygon) => void;
   onMarketUpdate?: (marketId: string, polygon: Polygon) => void;
   onMarketDelete?: (marketId: string) => void;
+  onMarketModeChange?: (mode: string) => void;
 }
 
 interface MapPoint {
@@ -131,6 +132,7 @@ export function MapView({
   onMarketCreate,
   onMarketUpdate,
   onMarketDelete,
+  onMarketModeChange,
 }: MapViewProps) {
   const [viewState, setViewState] = useState(DEFAULT_MAP_CONFIG.initialViewState);
   const [cursor, setCursor] = useState<string>('auto');
@@ -1085,6 +1087,7 @@ export function MapView({
             onCreate={onMarketCreate}
             onUpdate={onMarketUpdate}
             onDelete={onMarketDelete}
+            onModeChange={onMarketModeChange}
           />
         )}
 
