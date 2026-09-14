@@ -7,6 +7,109 @@ import type { ControlPosition } from 'react-map-gl/mapbox';
 import type { DrawCreateEvent, DrawUpdateEvent, DrawDeleteEvent, DrawModeChangeEvent } from '@mapbox/mapbox-gl-draw';
 import type { Polygon, FeatureCollection } from 'geojson';
 
+// Custom mapbox-gl-draw styles based on the default theme, with the first polygon
+// vertex highlighted so users can easily close the shape by clicking it.
+const DRAW_STYLES = [
+  {
+    id: 'gl-draw-polygon-fill',
+    type: 'fill',
+    filter: ['all', ['==', '$type', 'Polygon']],
+    paint: {
+      'fill-color': ['case', ['==', ['get', 'active'], 'true'], '#f97316', '#3b82f6'],
+      'fill-opacity': 0.15,
+    },
+  },
+  {
+    id: 'gl-draw-lines',
+    type: 'line',
+    filter: ['any', ['==', '$type', 'LineString'], ['==', '$type', 'Polygon']],
+    layout: {
+      'line-cap': 'round',
+      'line-join': 'round',
+    },
+    paint: {
+      'line-color': ['case', ['==', ['get', 'active'], 'true'], '#f97316', '#3b82f6'],
+      'line-dasharray': ['case', ['==', ['get', 'active'], 'true'], [0.2, 2], [2, 0]],
+      'line-width': 2.5,
+    },
+  },
+  {
+    id: 'gl-draw-point-outer',
+    type: 'circle',
+    filter: ['all', ['==', '$type', 'Point'], ['==', 'meta', 'feature']],
+    paint: {
+      'circle-radius': ['case', ['==', ['get', 'active'], 'true'], 7, 5],
+      'circle-color': '#fff',
+    },
+  },
+  {
+    id: 'gl-draw-point-inner',
+    type: 'circle',
+    filter: ['all', ['==', '$type', 'Point'], ['==', 'meta', 'feature']],
+    paint: {
+      'circle-radius': ['case', ['==', ['get', 'active'], 'true'], 5, 3],
+      'circle-color': ['case', ['==', ['get', 'active'], 'true'], '#f97316', '#3b82f6'],
+    },
+  },
+  {
+    id: 'gl-draw-vertex-outer',
+    type: 'circle',
+    filter: ['all', ['==', '$type', 'Point'], ['==', 'meta', 'vertex'], ['!=', 'mode', 'simple_select']],
+    paint: {
+      'circle-radius': ['case', ['==', ['get', 'active'], 'true'], 8, 6],
+      'circle-color': '#fff',
+    },
+  },
+  {
+    id: 'gl-draw-vertex-inner',
+    type: 'circle',
+    filter: ['all', ['==', '$type', 'Point'], ['==', 'meta', 'vertex'], ['!=', 'mode', 'simple_select']],
+    paint: {
+      'circle-radius': ['case', ['==', ['get', 'active'], 'true'], 5, 3],
+      'circle-color': ['case', ['==', ['get', 'active'], 'true'], '#ef4444', '#f97316'],
+    },
+  },
+  {
+    id: 'gl-draw-vertex-first-outer',
+    type: 'circle',
+    filter: [
+      'all',
+      ['==', '$type', 'Point'],
+      ['==', 'meta', 'vertex'],
+      ['==', 'active', 'true'],
+      ['==', 'coord_path', '0.0'],
+    ],
+    paint: {
+      'circle-radius': 11,
+      'circle-color': '#fff',
+    },
+  },
+  {
+    id: 'gl-draw-vertex-first-inner',
+    type: 'circle',
+    filter: [
+      'all',
+      ['==', '$type', 'Point'],
+      ['==', 'meta', 'vertex'],
+      ['==', 'active', 'true'],
+      ['==', 'coord_path', '0.0'],
+    ],
+    paint: {
+      'circle-radius': 7,
+      'circle-color': '#dc2626',
+    },
+  },
+  {
+    id: 'gl-draw-midpoint',
+    type: 'circle',
+    filter: ['all', ['==', 'meta', 'midpoint']],
+    paint: {
+      'circle-radius': 3,
+      'circle-color': '#f97316',
+    },
+  },
+];
+
 interface MarketDrawControlProps {
   position?: ControlPosition;
   features?: FeatureCollection<Polygon>;
@@ -55,11 +158,12 @@ export function MarketDrawControl({
   const draw = useControl(
     () => {
       return new MapboxDraw({
-        displayControlsDefault: false,
-        defaultMode: 'simple_select',
-        clickBuffer: 10,
-        touchBuffer: 25,
-      });
+          displayControlsDefault: false,
+          defaultMode: 'simple_select',
+          clickBuffer: 10,
+          touchBuffer: 25,
+          styles: DRAW_STYLES,
+        });
     },
     () => {
       setIsReady(true);
