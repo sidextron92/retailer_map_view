@@ -1,7 +1,8 @@
 import area from '@turf/area';
 import kinks from '@turf/kinks';
 import booleanCrosses from '@turf/boolean-crosses';
-import type { Polygon, Feature, Position } from 'geojson';
+import { lineString } from '@turf/helpers';
+import type { Polygon, Feature, LineString, Position } from 'geojson';
 
 export interface MarketValidationResult {
   valid: boolean;
@@ -16,6 +17,10 @@ function polygonToFeature(polygon: Polygon): Feature<Polygon> {
     properties: {},
     geometry: polygon,
   };
+}
+
+function getBoundaryLine(polygon: Polygon): Feature<LineString> {
+  return lineString(polygon.coordinates[0]);
 }
 
 /**
@@ -57,9 +62,12 @@ export function validateMarketPolygon(
     errors.push('Market boundary must not cross itself.');
   }
 
-  // Boundary crossing with existing markets
+  // Boundary crossing with existing markets.
+  // We compare the boundary LineStrings rather than the Polygon geometries so that
+  // overlapping interiors are allowed but boundary lines cannot cross.
+  const newBoundary = getBoundaryLine(polygon);
   for (const existing of existingMarkets) {
-    if (booleanCrosses(polygonToFeature(polygon), polygonToFeature(existing))) {
+    if (booleanCrosses(newBoundary, getBoundaryLine(existing))) {
       errors.push('Market boundary must not cross an existing market boundary.');
       break;
     }
