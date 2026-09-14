@@ -9,15 +9,20 @@ import Map, {
   Marker,
 } from 'react-map-gl/mapbox';
 import type { MapRef, LngLatBounds } from 'react-map-gl/mapbox';
+import type { Polygon } from 'geojson';
 import type { Retailer } from '@/types/retailer';
 import type { Darkstore } from '@/types/darkstore';
 import type { TamRetailer } from '@/types/tam-retailer';
+import type { ViewMode } from '@/types/market';
 import type { PincodeFeatureCollection } from '@/lib/utils/pincode-detector';
+import type { MarketFeatureCollection } from '@/hooks/useMarketBoundaries';
 import { MAPBOX_TOKEN, DEFAULT_MAP_CONFIG, CLUSTER_CONFIG } from '@/lib/mapbox/config';
 import { getMarkerColor } from '@/lib/utils/markers';
 import { usePincodeBoundaries } from '@/hooks/usePincodeBoundaries';
 import { formatDeliveryTAT } from '@/lib/utils/delivery-tat';
 import { calculateDistance, formatDistance } from '@/lib/utils/distance';
+import { MarketDrawControl } from './MarketDrawControl';
+import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css';
 
 interface DistanceLine {
   id: string;
@@ -36,8 +41,14 @@ interface MapViewProps {
   isOpsMode?: boolean;
   isTamMode?: boolean;
   isPinPlacementMode?: boolean;
+  viewMode?: ViewMode;
+  isAdmin?: boolean;
+  marketFeatureCollection?: MarketFeatureCollection | null;
+  drawingMarket?: boolean;
+  editingMarketId?: string | null;
   onMarkerClick: (retailer: Retailer) => void;
   onTamRetailerClick?: (retailers: TamRetailer[]) => void;
+  onMarketClick?: (marketId: string, marketName: string) => void;
   onLocationChange?: (location: { latitude: number; longitude: number; accuracy?: number } | null) => void;
   onZoomChange?: (zoom: number) => void;
   onPincodeLoadReady?: (loadPincodes: () => Promise<void>) => void;
@@ -45,6 +56,9 @@ interface MapViewProps {
   onPincodeDataUpdate?: (data: PincodeFeatureCollection) => void;
   onPinPlaced?: (latitude: number, longitude: number) => void;
   onPinPlacementCancel?: () => void;
+  onMarketCreate?: (polygon: Polygon) => void;
+  onMarketUpdate?: (marketId: string, polygon: Polygon) => void;
+  onMarketDelete?: (marketId: string) => void;
 }
 
 interface MapPoint {
@@ -92,7 +106,32 @@ const LINE_COLORS = [
   '#14b8a6', // teal
 ];
 
-export function MapView({ retailers, tamRetailers = [], darkstore, isOpsMode, isTamMode, isPinPlacementMode, onMarkerClick, onTamRetailerClick, onLocationChange, onZoomChange, onPincodeLoadReady, onPincodeDataStatus, onPincodeDataUpdate, onPinPlaced, onPinPlacementCancel }: MapViewProps) {
+export function MapView({
+  retailers,
+  tamRetailers = [],
+  darkstore,
+  isOpsMode,
+  isTamMode,
+  isPinPlacementMode,
+  viewMode = 'pincode',
+  isAdmin = false,
+  marketFeatureCollection,
+  drawingMarket = false,
+  editingMarketId = null,
+  onMarkerClick,
+  onTamRetailerClick,
+  onMarketClick,
+  onLocationChange,
+  onZoomChange,
+  onPincodeLoadReady,
+  onPincodeDataStatus,
+  onPincodeDataUpdate,
+  onPinPlaced,
+  onPinPlacementCancel,
+  onMarketCreate,
+  onMarketUpdate,
+  onMarketDelete,
+}: MapViewProps) {
   const [viewState, setViewState] = useState(DEFAULT_MAP_CONFIG.initialViewState);
   const [cursor, setCursor] = useState<string>('auto');
   const mapRef = useRef<MapRef>(null);
@@ -116,6 +155,13 @@ export function MapView({ retailers, tamRetailers = [], darkstore, isOpsMode, is
     pincode: string;
     office_name: string;
     deliverytat?: number | null;
+    x: number;
+    y: number;
+  } | null>(null);
+
+  // Market hover state
+  const [hoveredMarket, setHoveredMarket] = useState<{
+    name: string;
     x: number;
     y: number;
   } | null>(null);
@@ -285,6 +331,36 @@ export function MapView({ retailers, tamRetailers = [], darkstore, isOpsMode, is
       })),
     };
   }, [tamRetailers]);
+
+  // Filter out the market currently being edited from the display layer
+  const displayedMarketFeatures = useMemo(() => {
+    if (!marketFeatureCollection) return null;
+    if (!editingMarketId) return marketFeatureCollection;
+
+    return {
+      ...marketFeatureCollection,
+      features: marketFeatureCollection.features.filter(
+        (f) => f.properties.id !== editingMarketId
+      ),
+    };
+  }, [marketFeatureCollection, editingMarketId]);
+
+  // Features loaded into mapbox-gl-draw (empty when drawing, single feature when editing)
+  const drawControlFeatures = useMemo(() => {
+    if (drawingMarket) {
+      return { type: 'FeatureCollection' as const, features: [] };
+    }
+    if (editingMarketId && marketFeatureCollection) {
+      const feature = marketFeatureCollection.features.find(
+        (f) => f.properties.id === editingMarketId
+      );
+      return {
+        type: 'FeatureCollection' as const,
+        features: feature ? [feature] : [],
+      };
+    }
+    return { type: 'FeatureCollection' as const, features: [] };
+  }, [drawingMarket, editingMarketId, marketFeatureCollection]);
 
   // Convert distance lines to GeoJSON format
   const distanceLinesGeoJSON = useMemo(() => {
@@ -538,7 +614,20 @@ export function MapView({ retailers, tamRetailers = [], darkstore, isOpsMode, is
 
   // Memoized move handler to prevent infinite re-render loops
   const handleMove = useCallback((evt: { viewState: typeof viewState }) => {
-    setViewState(evt.viewState);
+    const { longitude, latitude, zoom } = evt.viewState;
+
+    setViewState((prev) => {
+      // Skip state update if the view hasn't meaningfully changed
+      if (
+        prev.longitude === longitude &&
+        prev.latitude === latitude &&
+        prev.zoom === zoom
+      ) {
+        return prev;
+      }
+      return evt.viewState;
+    });
+
     // Update bounds for pincode queries
     if (mapRef.current) {
       setMapBounds(mapRef.current.getBounds());
@@ -553,6 +642,21 @@ export function MapView({ retailers, tamRetailers = [], darkstore, isOpsMode, is
       setMapBounds(mapRef.current.getBounds());
     }
   }, []);
+
+  // Stable prop values for the Map component to avoid unnecessary re-renders
+  const mapStyle = useMemo(() => ({ width: '100%', height: '100%' }), []);
+  const interactiveLayerIds = useMemo(
+    () => [
+      'clusters',
+      'unclustered-point',
+      'tam-retailer-point',
+      'pincode-fill',
+      'pincode-outline',
+      'market-fill',
+      'market-outline',
+    ],
+    []
+  );
 
   if (!MAPBOX_TOKEN) {
     return (
@@ -578,18 +682,34 @@ export function MapView({ retailers, tamRetailers = [], darkstore, isOpsMode, is
         onLoad={handleLoad}
         mapboxAccessToken={MAPBOX_TOKEN}
         mapStyle={DEFAULT_MAP_CONFIG.mapStyle}
-        style={{ width: '100%', height: '100%' }}
+        style={mapStyle}
         maxZoom={20}
         minZoom={3}
         dragRotate={false}
-        interactiveLayerIds={['clusters', 'unclustered-point', 'tam-retailer-point', 'pincode-fill', 'pincode-outline']}
+        interactiveLayerIds={interactiveLayerIds}
         onMouseMove={(e) => {
           // Handle distance line drawing
           handleMapMouseMove(e);
 
           const features = e.features;
 
-          // Check for pincode hover
+          // Check for market hover (markets view)
+          const marketFeature = features?.find(
+            f => f.layer?.id === 'market-fill' || f.layer?.id === 'market-outline'
+          );
+
+          if (viewMode === 'markets' && marketFeature && marketFeature.properties) {
+            setHoveredMarket({
+              name: marketFeature.properties.name || '',
+              x: e.point.x,
+              y: e.point.y,
+            });
+            setHoveredPincode(null);
+            setCursor('pointer');
+            return;
+          }
+
+          // Check for pincode hover (pincode view)
           const pincodeFeature = features?.find(
             f => f.layer?.id === 'pincode-fill' || f.layer?.id === 'pincode-outline'
           );
@@ -602,18 +722,22 @@ export function MapView({ retailers, tamRetailers = [], darkstore, isOpsMode, is
               x: e.point.x,
               y: e.point.y,
             });
+            setHoveredMarket(null);
             setCursor('pointer');
           } else if (features && features.length > 0) {
             setHoveredPincode(null);
+            setHoveredMarket(null);
             setCursor('pointer');
           } else {
             setHoveredPincode(null);
+            setHoveredMarket(null);
             setCursor('auto');
           }
         }}
         onMouseLeave={() => {
           setCursor('auto');
           setHoveredPincode(null);
+          setHoveredMarket(null);
         }}
         onMouseUp={handleMouseUp}
         onClick={(e) => {
@@ -627,6 +751,24 @@ export function MapView({ retailers, tamRetailers = [], darkstore, isOpsMode, is
           );
 
           if (!clickableFeature) return;
+
+          // Check if it's a market polygon click (TAM mode + markets view, not while drawing/editing)
+          if (
+            isTamMode &&
+            viewMode === 'markets' &&
+            !drawingMarket &&
+            !editingMarketId &&
+            clickableFeature.layer &&
+            (clickableFeature.layer.id === 'market-fill' || clickableFeature.layer.id === 'market-outline') &&
+            clickableFeature.properties
+          ) {
+            const marketId = String(clickableFeature.properties.id ?? '');
+            const marketName = String(clickableFeature.properties.name ?? 'Market');
+            if (marketId && onMarketClick) {
+              onMarketClick(marketId, marketName);
+            }
+            return;
+          }
 
           // Check if it's a TAM retailer
           if (clickableFeature.layer && clickableFeature.layer.id === 'tam-retailer-point') {
@@ -852,7 +994,7 @@ export function MapView({ retailers, tamRetailers = [], darkstore, isOpsMode, is
         )}
 
         {/* Pincode Boundaries Layer - Rendered last but placed at bottom of visual stack */}
-        {pincodeData && (
+        {viewMode === 'pincode' && pincodeData && (
           <Source
             id="pincode-boundaries"
             type="geojson"
@@ -892,6 +1034,58 @@ export function MapView({ retailers, tamRetailers = [], darkstore, isOpsMode, is
               beforeId="clusters"
             />
           </Source>
+        )}
+
+        {/* Market Boundaries Layer */}
+        {viewMode === 'markets' && displayedMarketFeatures && (
+          <Source
+            id="market-boundaries"
+            type="geojson"
+            data={displayedMarketFeatures}
+          >
+            <Layer
+              id="market-fill"
+              type="fill"
+              paint={{
+                'fill-color': ['get', 'fillColor'],
+                'fill-opacity': [
+                  'case',
+                  ['boolean', ['feature-state', 'hover'], false],
+                  0.2,
+                  0.08
+                ],
+              }}
+              beforeId="clusters"
+            />
+            <Layer
+              id="market-outline"
+              type="line"
+              paint={{
+                'line-color': ['get', 'outlineColor'],
+                'line-width': [
+                  'case',
+                  ['boolean', ['feature-state', 'hover'], false],
+                  2.5,
+                  1.5
+                ],
+                'line-opacity': 0.7,
+              }}
+              beforeId="clusters"
+            />
+          </Source>
+        )}
+
+        {/* Market Draw Control (admin only in markets view) */}
+        {isAdmin && viewMode === 'markets' && (
+          <MarketDrawControl
+            position="top-left"
+            features={drawControlFeatures}
+            drawing={drawingMarket}
+            editingFeatureId={editingMarketId}
+            onCreate={onMarketCreate}
+            onUpdate={onMarketUpdate}
+            onDelete={onMarketDelete}
+          />
         )}
 
         {/* Distance Lines Layer */}
@@ -1088,6 +1282,20 @@ export function MapView({ retailers, tamRetailers = [], darkstore, isOpsMode, is
           }`}>
             {formatDeliveryTAT(hoveredPincode.deliverytat)}
           </div>
+        </div>
+      )}
+
+      {/* Market hover tooltip */}
+      {hoveredMarket && (
+        <div
+          className="pointer-events-none absolute z-50 rounded-lg bg-gray-900 px-3 py-2 text-sm text-white shadow-lg"
+          style={{
+            left: hoveredMarket.x + 10,
+            top: hoveredMarket.y + 10,
+          }}
+        >
+          <div className="font-semibold">{hoveredMarket.name}</div>
+          <div className="text-xs text-gray-300">Market</div>
         </div>
       )}
 

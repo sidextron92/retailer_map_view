@@ -4,10 +4,19 @@ import { useState, useEffect } from 'react';
 import { X, Loader2, BarChart3 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 import { detectPincodeFromLocation } from '@/lib/utils/pincode-detector';
+import { formatMarketArea } from '@/lib/utils/market-geometry';
 import type { PincodeFeatureCollection } from '@/lib/utils/pincode-detector';
+import type { ViewMode } from '@/types/market';
 
 interface PincodeData {
   pincode: string;
+  count: number;
+}
+
+interface MarketData {
+  id: string | null;
+  name: string;
+  areaSqm: number | null;
   count: number;
 }
 
@@ -17,6 +26,7 @@ interface MarketDataSheetProps {
   darkstore: string;
   userLocation: { latitude: number; longitude: number; accuracy?: number } | null;
   pincodeData: PincodeFeatureCollection | null;
+  viewMode: ViewMode;
 }
 
 export function MarketDataSheet({
@@ -25,8 +35,10 @@ export function MarketDataSheet({
   darkstore,
   userLocation,
   pincodeData,
+  viewMode,
 }: MarketDataSheetProps) {
-  const [marketData, setMarketData] = useState<PincodeData[]>([]);
+  const [pincodeMarketData, setPincodeMarketData] = useState<PincodeData[]>([]);
+  const [marketBoundaryData, setMarketBoundaryData] = useState<MarketData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,59 +47,91 @@ export function MarketDataSheet({
     ? detectPincodeFromLocation(userLocation.latitude, userLocation.longitude, pincodeData)
     : null;
 
-  // Fetch market data
+  // Fetch data
   useEffect(() => {
     if (!isOpen) return;
 
-    async function fetchMarketData() {
+    async function fetchData() {
       try {
         setLoading(true);
         setError(null);
 
-        // Fetch all migrated TAM retailers for this darkstore
-        const { data, error: fetchError } = await supabase
-          .from('rmv_tam_retailers')
-          .select('pincode')
-          .ilike('darkstore', darkstore);
+        if (viewMode === 'markets') {
+          const { data, error: rpcError } = await supabase.rpc('rmv_get_market_data', {
+            p_darkstore: darkstore,
+          });
 
-        if (fetchError) throw fetchError;
+          if (rpcError) throw rpcError;
 
-        // Group by pincode and count
-        const pincodeMap = new Map<string, number>();
-        data?.forEach((row) => {
-          const pincode = row.pincode;
-          pincodeMap.set(pincode, (pincodeMap.get(pincode) || 0) + 1);
-        });
+          const rows = (data || []) as {
+            id: string | null;
+            name: string;
+            area_sqm: number | null;
+            retailer_count: number;
+          }[];
 
-        // Convert to array and sort by count (highest to lowest)
-        let pincodeArray: PincodeData[] = Array.from(pincodeMap.entries()).map(
-          ([pincode, count]) => ({ pincode, count })
-        );
+          const mapped: MarketData[] = rows.map((row) => ({
+            id: row.id,
+            name: row.name,
+            areaSqm: row.area_sqm,
+            count: Number(row.retailer_count),
+          }));
 
-        // Filter to only show pincodes with at least 1 retailer
-        pincodeArray = pincodeArray.filter((item) => item.count > 0);
+          // Sort by count descending, keeping Outside Market at the bottom
+          mapped.sort((a, b) => {
+            if (a.id === null) return 1;
+            if (b.id === null) return -1;
+            return b.count - a.count;
+          });
 
-        // Sort by count descending
-        pincodeArray.sort((a, b) => b.count - a.count);
+          setMarketBoundaryData(mapped);
+          setPincodeMarketData([]);
+        } else {
+          // Fetch all migrated TAM retailers for this darkstore
+          const { data, error: fetchError } = await supabase
+            .from('rmv_tam_retailers')
+            .select('pincode')
+            .ilike('darkstore', darkstore);
 
-        // If user has a current pincode, add it to the top if not already in the list
-        if (currentPincode) {
-          const existingIndex = pincodeArray.findIndex(
-            (item) => item.pincode === currentPincode
+          if (fetchError) throw fetchError;
+
+          // Group by pincode and count
+          const pincodeMap = new Map<string, number>();
+          data?.forEach((row) => {
+            const pincode = row.pincode;
+            pincodeMap.set(pincode, (pincodeMap.get(pincode) || 0) + 1);
+          });
+
+          // Convert to array and sort by count (highest to lowest)
+          let pincodeArray: PincodeData[] = Array.from(pincodeMap.entries()).map(
+            ([pincode, count]) => ({ pincode, count })
           );
 
-          if (existingIndex === -1) {
-            // Current pincode not in list, add it with 0 count at the top
-            pincodeArray.unshift({ pincode: currentPincode, count: 0 });
-          } else if (existingIndex > 0) {
-            // Current pincode exists but not at the top, move it to the top
-            const [currentItem] = pincodeArray.splice(existingIndex, 1);
-            pincodeArray.unshift(currentItem);
-          }
-          // If existingIndex === 0, it's already at the top, do nothing
-        }
+          // Filter to only show pincodes with at least 1 retailer
+          pincodeArray = pincodeArray.filter((item) => item.count > 0);
 
-        setMarketData(pincodeArray);
+          // Sort by count descending
+          pincodeArray.sort((a, b) => b.count - a.count);
+
+          // If user has a current pincode, add it to the top if not already in the list
+          if (currentPincode) {
+            const existingIndex = pincodeArray.findIndex(
+              (item) => item.pincode === currentPincode
+            );
+
+            if (existingIndex === -1) {
+              // Current pincode not in list, add it with 0 count at the top
+              pincodeArray.unshift({ pincode: currentPincode, count: 0 });
+            } else if (existingIndex > 0) {
+              // Current pincode exists but not at the top, move it to the top
+              const [currentItem] = pincodeArray.splice(existingIndex, 1);
+              pincodeArray.unshift(currentItem);
+            }
+          }
+
+          setPincodeMarketData(pincodeArray);
+          setMarketBoundaryData([]);
+        }
       } catch (err) {
         console.error('Error fetching market data:', err);
         setError(err instanceof Error ? err.message : 'Failed to fetch market data');
@@ -96,10 +140,16 @@ export function MarketDataSheet({
       }
     }
 
-    fetchMarketData();
-  }, [isOpen, darkstore, currentPincode]);
+    fetchData();
+  }, [isOpen, darkstore, currentPincode, viewMode]);
 
   if (!isOpen) return null;
+
+  const isMarketsView = viewMode === 'markets';
+  const title = isMarketsView ? 'Market Data' : 'Pincode Data';
+
+  const pincodeTotalCount = pincodeMarketData.reduce((sum, item) => sum + item.count, 0);
+  const marketTotalCount = marketBoundaryData.reduce((sum, item) => sum + item.count, 0);
 
   return (
     <>
@@ -112,7 +162,7 @@ export function MarketDataSheet({
         <div className="flex items-center justify-between border-b bg-white px-6 py-4">
           <div className="flex items-center gap-2">
             <BarChart3 className="h-5 w-5 text-gray-700" />
-            <h2 className="text-xl font-semibold text-gray-900">Market Data</h2>
+            <h2 className="text-xl font-semibold text-gray-900">{title}</h2>
           </div>
           <button
             onClick={onClose}
@@ -139,10 +189,10 @@ export function MarketDataSheet({
             </div>
           )}
 
-          {/* Data Table */}
-          {!loading && !error && (
+          {/* Pincode Data Table */}
+          {!loading && !error && !isMarketsView && (
             <>
-              {marketData.length === 0 ? (
+              {pincodeMarketData.length === 0 ? (
                 <div className="py-12 text-center">
                   <p className="text-gray-500">No retailer data available</p>
                 </div>
@@ -160,7 +210,7 @@ export function MarketDataSheet({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200 bg-white">
-                      {marketData.map((item, index) => {
+                      {pincodeMarketData.map((item, index) => {
                         const isCurrentPincode = item.pincode === currentPincode;
                         return (
                           <tr
@@ -197,20 +247,98 @@ export function MarketDataSheet({
               )}
             </>
           )}
+
+          {/* Market Data Table */}
+          {!loading && !error && isMarketsView && (
+            <>
+              {marketBoundaryData.length === 0 ? (
+                <div className="py-12 text-center">
+                  <p className="text-gray-500">No market data available</p>
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-lg border border-gray-200">
+                  <table className="w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-700">
+                          Market
+                        </th>
+                        <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-700">
+                          Area
+                        </th>
+                        <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-700">
+                          Retailers
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 bg-white">
+                      {marketBoundaryData.map((item, index) => {
+                        const isOutsideMarket = item.id === null;
+                        return (
+                          <tr
+                            key={item.name}
+                            className={
+                              isOutsideMarket
+                                ? 'bg-gray-50'
+                                : index % 2 === 0
+                                ? 'bg-white'
+                                : 'bg-gray-50/50'
+                            }
+                          >
+                            <td className="whitespace-nowrap px-6 py-4">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium text-gray-900">
+                                  {item.name}
+                                </span>
+                                {isOutsideMarket && (
+                                  <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+                                    Uncategorized
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-900">
+                              {item.areaSqm !== null ? formatMarketArea(item.areaSqm) : '-'}
+                            </td>
+                            <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-900">
+                              {item.count}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
         </div>
 
         {/* Footer with Summary */}
-        {!loading && !error && marketData.length > 0 && (
+        {!loading && !error && !isMarketsView && pincodeMarketData.length > 0 && (
           <div className="border-t bg-gray-50 px-6 py-4">
             <div className="flex items-center justify-between text-sm">
               <span className="font-medium text-gray-700">Total Pincodes:</span>
-              <span className="font-semibold text-gray-900">{marketData.length}</span>
+              <span className="font-semibold text-gray-900">{pincodeMarketData.length}</span>
             </div>
             <div className="mt-1 flex items-center justify-between text-sm">
               <span className="font-medium text-gray-700">Total Retailers:</span>
+              <span className="font-semibold text-gray-900">{pincodeTotalCount}</span>
+            </div>
+          </div>
+        )}
+
+        {!loading && !error && isMarketsView && marketBoundaryData.length > 0 && (
+          <div className="border-t bg-gray-50 px-6 py-4">
+            <div className="flex items-center justify-between text-sm">
+              <span className="font-medium text-gray-700">Total Markets:</span>
               <span className="font-semibold text-gray-900">
-                {marketData.reduce((sum, item) => sum + item.count, 0)}
+                {marketBoundaryData.filter((m) => m.id !== null).length}
               </span>
+            </div>
+            <div className="mt-1 flex items-center justify-between text-sm">
+              <span className="font-medium text-gray-700">Total Retailers:</span>
+              <span className="font-semibold text-gray-900">{marketTotalCount}</span>
             </div>
           </div>
         )}

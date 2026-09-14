@@ -28,6 +28,7 @@ Tables:
 - `rmv_pincode_boundaries`
 - `rmv_darkstore_locations`
 - `rmv_tam_retailers`
+- `rmv_market_boundaries`
 
 Storage bucket:
 
@@ -40,8 +41,66 @@ RPC/functions:
 - `rmv_update_geolocation`
 - `rmv_update_darkstore_updated_at`
 - `rmv_update_tam_retailers_updated_at`
+- `rmv_get_retailers_in_market`
+- `rmv_get_market_data`
+- `rmv_check_market_boundary_crossing`
 
 Do not use or recreate the old `exec_sql` RPC in the target project.
+
+## Market Boundaries (Custom Catchments)
+
+Custom market polygons are an alternative aggregation layer to pincodes. They are scoped per darkstore and can be drawn by admins when `role=admin` is present in the URL.
+
+### Database objects
+
+New table:
+
+- `rmv_market_boundaries`
+
+New RPCs:
+
+- `rmv_get_retailers_in_market(p_market_id UUID, p_darkstore TEXT)` — returns TAM retailers inside a market.
+- `rmv_get_market_data(p_darkstore TEXT)` — returns market-level retailer counts and area, including an "Outside Market" bucket.
+- `rmv_check_market_boundary_crossing(p_darkstore TEXT, p_geometry GEOMETRY, p_exclude_id UUID DEFAULT NULL)` — returns any existing market whose boundary crosses the supplied geometry.
+
+**Migration:** `supabase/migrations/021_create_rmv_market_boundaries.sql`
+
+### URL parameters
+
+- `view=pincodes` (default) — show pincode boundary polygons.
+- `view=markets` — show custom market boundary polygons.
+- `role=admin` — enables drawing, editing, and deleting market boundaries.
+
+Examples:
+
+```text
+/?mode=tam&darkstore=Agra&view=markets&role=admin
+/?mode=tam&darkstore=Agra&view=markets
+/?darkstore=Agra&view=markets
+```
+
+### Behavior
+
+- A **Pincode / Markets** toggle appears near the bottom-right action buttons whenever a `darkstore` is present.
+- Default view is `pincodes`.
+- In `markets` view, admins see a **Draw Market** button. Clicking it enters polygon drawing mode via `@mapbox/mapbox-gl-draw`.
+- New markets must have at least 3 distinct points, an area of at least 200 m², and boundaries must not cross any existing market boundary (overlapping interiors are allowed).
+- Clicking a market polygon in TAM mode opens a modal listing TAM retailers inside that market. Admin users also see **Edit Boundary** and **Delete** actions.
+- The data button label changes based on the active view: **Show Pincode Data** or **Show Market Data**.
+- The Markets data table shows market name, area, retailer count, and an "Outside Market" bucket for retailers not inside any market.
+
+### Runtime code references
+
+Current app code should use:
+
+- `supabase.from('rmv_market_boundaries')`
+- `supabase.rpc('rmv_get_retailers_in_market')`
+- `supabase.rpc('rmv_get_market_data')`
+- `supabase.rpc('rmv_check_market_boundary_crossing')`
+
+### Security note
+
+Admin authorization is currently URL-based (`role=admin`). This is client-side only and can be spoofed. Treat it as a UI gate for this version; harden with Supabase Auth/RLS before exposing sensitive operations.
 
 ## Legacy Source Project
 
@@ -56,7 +115,11 @@ Current app code should use:
 - `supabase.from('rmv_retailers')`
 - `supabase.from('rmv_darkstore_locations')`
 - `supabase.from('rmv_tam_retailers')`
+- `supabase.from('rmv_market_boundaries')`
 - `supabase.rpc('rmv_get_pincodes_by_radius')`
+- `supabase.rpc('rmv_get_retailers_in_market')`
+- `supabase.rpc('rmv_get_market_data')`
+- `supabase.rpc('rmv_check_market_boundary_crossing')`
 - `supabase.storage.from('rmv_tam-shop-photos')`
 
 Do not reintroduce unprefixed runtime references such as:
@@ -66,9 +129,13 @@ Do not reintroduce unprefixed runtime references such as:
 - `pincode_boundaries`
 - `darkstore_locations`
 - `tam_retailers`
+- `market_boundaries`
 - `tam-shop-photos`
 - `get_pincodes_by_radius`
 - `get_pincodes_in_viewport`
+- `get_retailers_in_market`
+- `get_market_data`
+- `check_market_boundary_crossing`
 - `exec_sql`
 
 The one-time migration helper `scripts/migrate-rmv-to-reqflow.js` intentionally references old source object names while copying from the source project into target `rmv_` objects.
@@ -126,6 +193,8 @@ Supported query params:
 
 - `mode`: optional mode selector, currently `tam` or `ops`
 - `darkstore`: filters/centers by darkstore name and is required for TAM mode
+- `view`: optional aggregation view, `pincodes` (default) or `markets`
+- `role`: optional UI role gate, `admin` enables market boundary editing
 - `sk_id`: server-side retailer filter
 - `buying_category`: server-side retailer filter
 
