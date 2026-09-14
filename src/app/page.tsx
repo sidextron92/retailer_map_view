@@ -452,6 +452,24 @@ function HomeContent() {
         <div className="absolute inset-0 pointer-events-none z-50 border-8 border-yellow-500" />
       )}
 
+      {/* Pulsing purple border overlay when drawing a market boundary */}
+      {drawingMarket && (
+        <div className="absolute inset-0 pointer-events-none z-[60] border-[6px] border-purple-500 animate-pulse" />
+      )}
+
+      {/* Cancel Drawing CTA */}
+      {drawingMarket && (
+        <div className="fixed top-4 left-1/2 z-[70] -translate-x-1/2">
+          <Button
+            onClick={() => setDrawingMarket(false)}
+            className="h-10 gap-2 rounded-full bg-red-600 px-5 text-sm font-semibold text-white shadow-xl hover:bg-red-700"
+          >
+            <X className="h-4 w-4" />
+            Cancel Drawing
+          </Button>
+        </div>
+      )}
+
       <MapView
         retailers={isTamMode ? [] : filteredRetailers}
         tamRetailers={isTamMode ? tamRetailers : []}
