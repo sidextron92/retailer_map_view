@@ -40,6 +40,8 @@ interface MapViewProps {
   darkstore?: Darkstore | null;
   isOpsMode?: boolean;
   isTamMode?: boolean;
+  isNormalMode?: boolean;
+  clusteringEnabled?: boolean;
   isPinPlacementMode?: boolean;
   viewMode?: ViewMode;
   isAdmin?: boolean;
@@ -113,6 +115,8 @@ export function MapView({
   darkstore,
   isOpsMode,
   isTamMode,
+  isNormalMode = false,
+  clusteringEnabled = true,
   isPinPlacementMode,
   viewMode = 'pincode',
   isAdmin = false,
@@ -754,9 +758,9 @@ export function MapView({
 
           if (!clickableFeature) return;
 
-          // Check if it's a market polygon click (TAM mode + markets view, not while drawing/editing)
+          // Check if it's a market polygon click in TAM or normal mode.
           if (
-            isTamMode &&
+            (isTamMode || isNormalMode) &&
             viewMode === 'markets' &&
             !drawingMarket &&
             !editingMarketId &&
@@ -874,10 +878,11 @@ export function MapView({
 
         {/* Retailers Data Source with Clustering */}
         <Source
+          key={clusteringEnabled ? 'retailers-clustered' : 'retailers-unclustered'}
           id="retailers"
           type="geojson"
           data={geojsonData}
-          cluster={true}
+          cluster={clusteringEnabled}
           clusterMaxZoom={CLUSTER_CONFIG.clusterMaxZoom}
           clusterRadius={CLUSTER_CONFIG.clusterRadius}
         >

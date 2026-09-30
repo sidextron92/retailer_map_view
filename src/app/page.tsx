@@ -7,6 +7,7 @@ import { MapView } from '@/components/map/MapView';
 import { RetailerDetailModal } from '@/components/modals/RetailerDetailModal';
 import { TamRetailerDetailModal } from '@/components/modals/TamRetailerDetailModal';
 import { MarketRetailersModalWrapper } from '@/components/modals/MarketRetailersModalWrapper';
+import { NormalMarketRetailersModalWrapper } from '@/components/modals/NormalMarketRetailersModalWrapper';
 import { FilterPanel } from '@/components/filters/FilterPanel';
 import { AddRetailerSheet } from '@/components/tam/AddRetailerSheet';
 import { MarketDataSheet } from '@/components/tam/MarketDataSheet';
@@ -54,6 +55,7 @@ function HomeContent() {
       role: searchParams.get('role')?.toLowerCase() ?? null,
     };
   }, [searchParams]);
+  const isNormalMode = mode === null;
   const isOpsMode = mode === 'ops';
   const isTamMode = mode === 'tam';
   const isAdmin = role === 'admin';
@@ -86,6 +88,7 @@ function HomeContent() {
 
   const [selectedRetailer, setSelectedRetailer] = useState<Retailer | null>(null);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [isClusteringEnabled, setIsClusteringEnabled] = useState(true);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number; accuracy?: number } | null>(null);
   const filters = useFilterStore();
   const activeFilterCount = getActiveFilterCount(filters);
@@ -476,6 +479,8 @@ function HomeContent() {
         darkstore={darkstore}
         isOpsMode={isOpsMode}
         isTamMode={isTamMode}
+        isNormalMode={isNormalMode}
+        clusteringEnabled={isNormalMode ? isClusteringEnabled : true}
         isPinPlacementMode={isPinPlacementMode}
         viewMode={viewMode}
         isAdmin={isAdmin}
@@ -509,6 +514,20 @@ function HomeContent() {
 
       {/* Button Group - Fixed at bottom right */}
       <div className="fixed right-4 bottom-4 z-30 flex flex-col gap-2 items-end">
+        {/* Clustering Toggle - Normal mode only */}
+        {isNormalMode && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setIsClusteringEnabled((enabled) => !enabled)}
+            aria-pressed={isClusteringEnabled}
+            className="h-9 bg-white shadow-lg"
+          >
+            Clustering: {isClusteringEnabled ? 'On' : 'Off'}
+          </Button>
+        )}
+
         {/* Pincode / Markets Toggle - Visible whenever a darkstore is present */}
         {darkstoreParam && (
           <div className="flex rounded-lg bg-white p-1 shadow-lg">
@@ -692,6 +711,21 @@ function HomeContent() {
           marketId={selectedMarketId}
           marketName={selectedMarketName}
           darkstore={darkstore.darkstore}
+          isOpen={isMarketRetailersModalOpen}
+          onClose={() => setIsMarketRetailersModalOpen(false)}
+          isAdmin={isAdmin}
+          onEdit={handleStartEditingMarket}
+          onDelete={handleDeleteMarket}
+        />
+      )}
+
+      {/* Market Retailers Modal (normal mode) */}
+      {isNormalMode && darkstoreParam && (
+        <NormalMarketRetailersModalWrapper
+          key={selectedMarketId ?? 'no-market'}
+          marketId={selectedMarketId}
+          marketName={selectedMarketName}
+          darkstore={darkstoreParam}
           isOpen={isMarketRetailersModalOpen}
           onClose={() => setIsMarketRetailersModalOpen(false)}
           isAdmin={isAdmin}

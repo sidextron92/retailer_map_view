@@ -42,6 +42,7 @@ RPC/functions:
 - `rmv_update_darkstore_updated_at`
 - `rmv_update_tam_retailers_updated_at`
 - `rmv_get_retailers_in_market`
+- `rmv_get_normal_retailers_in_market`
 - `rmv_get_market_data`
 - `rmv_check_market_boundary_crossing`
 
@@ -60,10 +61,14 @@ New table:
 New RPCs:
 
 - `rmv_get_retailers_in_market(p_market_id UUID, p_darkstore TEXT)` — returns TAM retailers inside a market.
+- `rmv_get_normal_retailers_in_market(p_market_id UUID, p_darkstore TEXT)` — returns normal-mode retailers inside a market, scoped only by darkstore and independent of active UI filters.
 - `rmv_get_market_data(p_darkstore TEXT)` — returns market-level retailer counts and area, including an "Outside Market" bucket.
 - `rmv_check_market_boundary_crossing(p_darkstore TEXT, p_geometry GEOMETRY, p_exclude_id UUID DEFAULT NULL)` — returns any existing market whose boundary crosses the supplied geometry.
 
-**Migration:** `supabase/migrations/021_create_rmv_market_boundaries.sql`
+**Migrations:**
+
+- `supabase/migrations/021_create_rmv_market_boundaries.sql`
+- `supabase/migrations/022_add_normal_market_retailers.sql`
 
 ### URL parameters
 
@@ -86,6 +91,7 @@ Examples:
 - In `markets` view, admins see a **Draw Market** button. Clicking it enters polygon drawing mode via `@mapbox/mapbox-gl-draw`.
 - New markets must have at least 3 distinct points, an area of at least 200 m², and boundaries must not cross any existing market boundary (overlapping interiors are allowed).
 - Clicking a market polygon in TAM mode opens a modal listing TAM retailers inside that market. Admin users also see **Edit Boundary** and **Delete** actions.
+- Clicking a market polygon in normal mode opens a modal listing all darkstore retailers inside that market, regardless of active map filters. The modal summarizes Total, Active, Idle, Churn, and Other/Unspecified retailers.
 - The data button label changes based on the active view: **Show Pincode Data** or **Show Market Data**.
 - The Markets data table shows market name, area, retailer count, and an "Outside Market" bucket for retailers not inside any market.
 
@@ -95,6 +101,7 @@ Current app code should use:
 
 - `supabase.from('rmv_market_boundaries')`
 - `supabase.rpc('rmv_get_retailers_in_market')`
+- `supabase.rpc('rmv_get_normal_retailers_in_market')`
 - `supabase.rpc('rmv_get_market_data')`
 - `supabase.rpc('rmv_check_market_boundary_crossing')`
 
@@ -118,6 +125,7 @@ Current app code should use:
 - `supabase.from('rmv_market_boundaries')`
 - `supabase.rpc('rmv_get_pincodes_by_radius')`
 - `supabase.rpc('rmv_get_retailers_in_market')`
+- `supabase.rpc('rmv_get_normal_retailers_in_market')`
 - `supabase.rpc('rmv_get_market_data')`
 - `supabase.rpc('rmv_check_market_boundary_crossing')`
 - `supabase.storage.from('rmv_tam-shop-photos')`
@@ -197,6 +205,8 @@ Supported query params:
 - `role`: optional UI role gate, `admin` enables market boundary editing
 - `sk_id`: server-side retailer filter
 - `buying_category`: server-side retailer filter
+
+In normal mode, retailer clustering is enabled by default. The **Clustering: On/Off** control switches between clustered retailer points and individual markers without affecting TAM or operations mode.
 
 The app also tolerates malformed shared links where `darkstore` is accidentally appended after a second `?` inside `mode`:
 
