@@ -5,7 +5,8 @@ const PAGE_SIZE = 1000;
 type PublicDarkstoreTable =
   | 'rmv_tam_retailers'
   | 'rmv_retailers'
-  | 'rmv_market_boundaries';
+  | 'rmv_market_boundaries'
+  | 'rmv_pincode_boundaries';
 
 export const publicApiHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type',

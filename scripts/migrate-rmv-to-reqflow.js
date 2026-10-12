@@ -180,7 +180,8 @@ CREATE TABLE IF NOT EXISTS public.rmv_pincode_boundaries (
   state VARCHAR(100),
   geometry GEOMETRY(MultiPolygon, 4326) NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  deliverytat NUMERIC DEFAULT NULL
+  deliverytat NUMERIC DEFAULT NULL,
+  darkstore_id INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS rmv_pincode_boundaries_geometry_idx ON public.rmv_pincode_boundaries USING GIST (geometry);
@@ -188,6 +189,7 @@ CREATE INDEX IF NOT EXISTS rmv_pincode_boundaries_geography_idx ON public.rmv_pi
 CREATE INDEX IF NOT EXISTS rmv_pincode_boundaries_pincode_idx ON public.rmv_pincode_boundaries (pincode);
 CREATE INDEX IF NOT EXISTS rmv_pincode_boundaries_state_idx ON public.rmv_pincode_boundaries (state);
 CREATE INDEX IF NOT EXISTS rmv_pincode_boundaries_deliverytat_idx ON public.rmv_pincode_boundaries (deliverytat) WHERE deliverytat IS NOT NULL;
+CREATE INDEX IF NOT EXISTS rmv_pincode_boundaries_darkstore_id_idx ON public.rmv_pincode_boundaries (darkstore_id);
 COMMENT ON TABLE public.rmv_pincode_boundaries IS 'India pincode boundaries with spatial geometry for map visualization';
 COMMENT ON COLUMN public.rmv_pincode_boundaries.deliverytat IS 'Delivery turnaround time in seconds. NULL means not serviceable.';
 
