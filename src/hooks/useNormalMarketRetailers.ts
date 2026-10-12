@@ -13,7 +13,7 @@ function getErrorMessage(err: unknown): string {
     const code = 'code' in err ? String((err as { code?: unknown }).code || '') : '';
 
     if (code === 'PGRST202') {
-      return 'The normal-market retailer RPC is not installed. Run migration 022_add_normal_market_retailers.sql in Supabase.';
+      return 'The normal-market retailer RPC is not installed. Run migration 023_add_darkstore_ids.sql in Supabase.';
     }
 
     if (message) return message;
@@ -23,7 +23,7 @@ function getErrorMessage(err: unknown): string {
 
 export function useNormalMarketRetailers(
   marketId: string | null,
-  darkstore: string | null | undefined,
+  darkstoreId: number | null | undefined,
   enabled: boolean
 ) {
   const [retailers, setRetailers] = useState<Retailer[]>([]);
@@ -31,7 +31,7 @@ export function useNormalMarketRetailers(
   const [error, setError] = useState<Error | null>(null);
 
   const fetchRetailers = useCallback(async () => {
-    if (!enabled || !marketId || !darkstore) {
+    if (!enabled || !marketId || !darkstoreId) {
       setRetailers([]);
       setLoading(false);
       setError(null);
@@ -50,7 +50,7 @@ export function useNormalMarketRetailers(
         const { data, error: fetchError } = await supabase
           .rpc('rmv_get_normal_retailers_in_market', {
             p_market_id: marketId,
-            p_darkstore: darkstore,
+            p_darkstore_id: darkstoreId,
           })
           .range(from, from + PAGE_SIZE - 1);
 
@@ -71,7 +71,7 @@ export function useNormalMarketRetailers(
     } finally {
       setLoading(false);
     }
-  }, [darkstore, enabled, marketId]);
+  }, [darkstoreId, enabled, marketId]);
 
   useEffect(() => {
     fetchRetailers();

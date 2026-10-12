@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 interface AddRetailerSheetProps {
   isOpen: boolean;
   onClose: () => void;
+  darkstoreId: number;
   darkstore: string;
   userLocation: { latitude: number; longitude: number; accuracy?: number } | null;
   manualLocation: { latitude: number; longitude: number } | null;
@@ -25,6 +26,7 @@ interface AddRetailerSheetProps {
 export function AddRetailerSheet({
   isOpen,
   onClose,
+  darkstoreId,
   darkstore,
   userLocation,
   manualLocation,
@@ -198,6 +200,7 @@ export function AddRetailerSheet({
         location_accuracy: isManual ? 9999 : (userLocation?.accuracy ?? null),
         location_source: isManual ? 'manual' : 'auto',
         pincode: detectedPincode,
+        darkstore_id: darkstoreId,
         darkstore: darkstore,
         user_agent: navigator.userAgent,
         device_info: deviceInfo,

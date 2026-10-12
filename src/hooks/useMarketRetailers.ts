@@ -4,13 +4,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import type { TamRetailer } from '@/types/tam-retailer';
 
-export function useMarketRetailers(marketId: string | null, darkstore: string | null | undefined) {
+export function useMarketRetailers(marketId: string | null, darkstoreId: number | null | undefined) {
   const [retailers, setRetailers] = useState<TamRetailer[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchRetailers = useCallback(async () => {
-    if (!marketId || !darkstore) {
+    if (!marketId || !darkstoreId) {
       setRetailers([]);
       return;
     }
@@ -22,7 +22,7 @@ export function useMarketRetailers(marketId: string | null, darkstore: string | 
       const { data, error: fetchError } = await supabase
         .rpc('rmv_get_retailers_in_market', {
           p_market_id: marketId,
-          p_darkstore: darkstore,
+          p_darkstore_id: darkstoreId,
         });
 
       if (fetchError) throw fetchError;
@@ -35,7 +35,7 @@ export function useMarketRetailers(marketId: string | null, darkstore: string | 
     } finally {
       setLoading(false);
     }
-  }, [marketId, darkstore]);
+  }, [marketId, darkstoreId]);
 
   useEffect(() => {
     fetchRetailers();

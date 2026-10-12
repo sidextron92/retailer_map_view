@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase/client';
 import type { Retailer } from '@/types/retailer';
 
 interface RetailerFilters {
-  darkstore?: string | null;
+  darkstoreId?: number | null;
   skId?: string | null;
   buyingCategory?: string | null;
 }
@@ -16,6 +16,13 @@ export function useRetailers(filters?: RetailerFilters) {
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
+    if (filters?.darkstoreId === null) {
+      setRetailers([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
     async function fetchRetailers() {
       try {
         setLoading(true);
@@ -33,9 +40,9 @@ export function useRetailers(filters?: RetailerFilters) {
             .from('rmv_retailers')
             .select('*');
 
-          // Apply server-side filters (case-insensitive)
-          if (filters?.darkstore) {
-            query = query.ilike('darkstore', filters.darkstore);
+          // Apply server-side filters
+          if (filters?.darkstoreId !== undefined) {
+            query = query.eq('darkstore_id', filters.darkstoreId);
           }
           if (filters?.skId) {
             query = query.ilike('sk_id', filters.skId);
@@ -76,7 +83,7 @@ export function useRetailers(filters?: RetailerFilters) {
     }
 
     fetchRetailers();
-  }, [filters?.darkstore, filters?.skId, filters?.buyingCategory]);
+  }, [filters?.darkstoreId, filters?.skId, filters?.buyingCategory]);
 
   return { retailers, loading, error, refetch: () => setLoading(true) };
 }

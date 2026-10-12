@@ -14,6 +14,7 @@ export interface Retailer {
   trader_name: string | null;
   buying_category: string | null;
   teamlead_name: string | null;
+  darkstore_id: number | null;
   darkstore: string | null;
   is_active: boolean;
   last_visit_date: string | null;

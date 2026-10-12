@@ -12,14 +12,14 @@ function getErrorMessage(err: unknown, fallback: string) {
   return fallback;
 }
 
-export function useTamRetailers(darkstore?: string | null) {
+export function useTamRetailers(darkstoreId?: number | null) {
   const [retailers, setRetailers] = useState<TamRetailer[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
     // If no darkstore provided, don't fetch
-    if (!darkstore) {
+    if (!darkstoreId) {
       setRetailers([]);
       setLoading(false);
       setError(null);
@@ -34,7 +34,7 @@ export function useTamRetailers(darkstore?: string | null) {
         const { data, error: fetchError } = await supabase
           .from('rmv_tam_retailers')
           .select('*')
-          .ilike('darkstore', darkstore!)
+          .eq('darkstore_id', darkstoreId)
           .order('created_at', { ascending: false });
 
         if (fetchError) throw fetchError;
@@ -50,11 +50,11 @@ export function useTamRetailers(darkstore?: string | null) {
     }
 
     fetchTamRetailers();
-  }, [darkstore]);
+  }, [darkstoreId]);
 
   // Refresh function to manually reload data
   const refresh = async () => {
-    if (!darkstore) return;
+    if (!darkstoreId) return;
 
     try {
       setLoading(true);
@@ -63,7 +63,7 @@ export function useTamRetailers(darkstore?: string | null) {
       const { data, error: fetchError } = await supabase
         .from('rmv_tam_retailers')
         .select('*')
-        .ilike('darkstore', darkstore)
+        .eq('darkstore_id', darkstoreId)
         .order('created_at', { ascending: false });
 
       if (fetchError) throw fetchError;

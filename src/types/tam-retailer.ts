@@ -9,6 +9,7 @@ export interface TamRetailer {
   location_accuracy: number | null;
   location_source: 'auto' | 'manual' | null;
   pincode: string;
+  darkstore_id: number;
   darkstore: string;
   user_agent: string | null;
   device_info: Record<string, unknown> | null;

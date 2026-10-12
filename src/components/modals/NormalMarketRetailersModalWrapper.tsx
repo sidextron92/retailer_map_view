@@ -7,7 +7,7 @@ import { NormalMarketRetailersModal } from './NormalMarketRetailersModal';
 interface NormalMarketRetailersModalWrapperProps {
   marketId: string | null;
   marketName: string;
-  darkstore: string;
+  darkstoreId: number;
   isOpen: boolean;
   onClose: () => void;
   isAdmin?: boolean;
@@ -18,14 +18,14 @@ interface NormalMarketRetailersModalWrapperProps {
 export function NormalMarketRetailersModalWrapper({
   marketId,
   marketName,
-  darkstore,
+  darkstoreId,
   isOpen,
   onClose,
   isAdmin = false,
   onEdit,
   onDelete,
 }: NormalMarketRetailersModalWrapperProps) {
-  const { retailers, loading, error } = useNormalMarketRetailers(marketId, darkstore, isOpen);
+  const { retailers, loading, error } = useNormalMarketRetailers(marketId, darkstoreId, isOpen);
 
   return (
     <>

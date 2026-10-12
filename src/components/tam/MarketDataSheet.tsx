@@ -23,7 +23,7 @@ interface MarketData {
 interface MarketDataSheetProps {
   isOpen: boolean;
   onClose: () => void;
-  darkstore: string;
+  darkstoreId: number;
   userLocation: { latitude: number; longitude: number; accuracy?: number } | null;
   pincodeData: PincodeFeatureCollection | null;
   viewMode: ViewMode;
@@ -32,7 +32,7 @@ interface MarketDataSheetProps {
 export function MarketDataSheet({
   isOpen,
   onClose,
-  darkstore,
+  darkstoreId,
   userLocation,
   pincodeData,
   viewMode,
@@ -58,7 +58,7 @@ export function MarketDataSheet({
 
         if (viewMode === 'markets') {
           const { data, error: rpcError } = await supabase.rpc('rmv_get_market_data', {
-            p_darkstore: darkstore,
+            p_darkstore_id: darkstoreId,
           });
 
           if (rpcError) throw rpcError;
@@ -91,7 +91,7 @@ export function MarketDataSheet({
           const { data, error: fetchError } = await supabase
             .from('rmv_tam_retailers')
             .select('pincode')
-            .ilike('darkstore', darkstore);
+            .eq('darkstore_id', darkstoreId);
 
           if (fetchError) throw fetchError;
 
@@ -141,7 +141,7 @@ export function MarketDataSheet({
     }
 
     fetchData();
-  }, [isOpen, darkstore, currentPincode, viewMode]);
+  }, [isOpen, darkstoreId, currentPincode, viewMode]);
 
   if (!isOpen) return null;
 

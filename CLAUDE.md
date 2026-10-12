@@ -60,15 +60,20 @@ New table:
 
 New RPCs:
 
-- `rmv_get_retailers_in_market(p_market_id UUID, p_darkstore TEXT)` — returns TAM retailers inside a market.
-- `rmv_get_normal_retailers_in_market(p_market_id UUID, p_darkstore TEXT)` — returns normal-mode retailers inside a market, scoped only by darkstore and independent of active UI filters.
-- `rmv_get_market_data(p_darkstore TEXT)` — returns market-level retailer counts and area, including an "Outside Market" bucket.
-- `rmv_check_market_boundary_crossing(p_darkstore TEXT, p_geometry GEOMETRY, p_exclude_id UUID DEFAULT NULL)` — returns any existing market whose boundary crosses the supplied geometry.
+- `rmv_get_retailers_in_market(p_market_id UUID, p_darkstore_id INTEGER)` — returns TAM retailers inside a market.
+- `rmv_get_normal_retailers_in_market(p_market_id UUID, p_darkstore_id INTEGER)` — returns normal-mode retailers inside a market, scoped only by darkstore ID and independent of active UI filters.
+- `rmv_get_market_data(p_darkstore_id INTEGER)` — returns market-level retailer counts and area, including an "Outside Market" bucket.
+- `rmv_check_market_boundary_crossing(p_darkstore_id INTEGER, p_geometry GEOMETRY, p_exclude_id UUID DEFAULT NULL)` — returns any existing market whose boundary crosses the supplied geometry.
 
 **Migrations:**
 
 - `supabase/migrations/021_create_rmv_market_boundaries.sql`
 - `supabase/migrations/022_add_normal_market_retailers.sql`
+- `supabase/migrations/023_add_darkstore_ids.sql`
+
+### Darkstore IDs
+
+The `darkstore` URL parameter remains name-based for readable shared links. The app resolves that name through `rmv_darkstore_locations`, then uses the external integer `darkstore_id` for queries, inserts, and RPC calls. The display-name `darkstore` columns remain available in `rmv_darkstore_locations`, `rmv_retailers`, `rmv_tam_retailers`, and `rmv_market_boundaries`.
 
 ### URL parameters
 

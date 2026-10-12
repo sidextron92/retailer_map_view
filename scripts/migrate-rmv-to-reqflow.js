@@ -20,6 +20,15 @@ const TARGET_BUCKET = 'rmv_tam-shop-photos';
 const API_BASE = 'https://api.supabase.com/v1';
 const PAGE_SIZE = 1000;
 const SQL_CHUNK_SIZE = 100;
+const DARKSTORE_IDS = new Map([
+  ['agra', 10], ['nagpur', 12], ['aurangabad', 16], ['solapur', 17],
+  ['nashik', 18], ['kolhapur', 19], ['raipur', 20], ['kurnool', 22],
+  ['vizag', 21], ['warangal', 23], ['pune', 24], ['malda', 26],
+  ['murshidabad', 27], ['nagaon', 28], ['ranchi', 29], ['madurai', 30],
+  ['patna', 31], ['bhubneshwar', 32], ['north24parganas', 34], ['silchar', 35],
+  ['siliguri', 36], ['coochbehar', 37], ['darbhanga', 38], ['agartala', 39],
+  ['dibrugarh', 40],
+]);
 
 const token = process.env.SUPABASE_ACCESS_TOKEN;
 
@@ -36,6 +45,12 @@ function sqlString(value) {
 function sqlNumber(value) {
   if (value === null || value === undefined || value === '') return 'NULL';
   return String(value);
+}
+
+function withDarkstoreId(row) {
+  const darkstoreId = DARKSTORE_IDS.get(row.darkstore?.trim().toLowerCase());
+  if (!darkstoreId) throw new Error(`Missing darkstore ID mapping for ${row.darkstore}`);
+  return { ...row, darkstore_id: darkstoreId };
 }
 
 async function managementFetch(path, options = {}) {
@@ -125,7 +140,8 @@ CREATE TABLE IF NOT EXISTS public.rmv_retailers (
   retailer_status VARCHAR(50),
   buying_category VARCHAR(100),
   teamlead_name VARCHAR(255),
-  darkstore VARCHAR(100)
+  darkstore VARCHAR(100),
+  darkstore_id INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS rmv_idx_retailers_visit_dates ON public.rmv_retailers(last_visit_date, next_scheduled_visit);
@@ -140,6 +156,7 @@ CREATE INDEX IF NOT EXISTS rmv_idx_retailers_retailer_status ON public.rmv_retai
 CREATE INDEX IF NOT EXISTS rmv_idx_retailers_buying_category ON public.rmv_retailers(buying_category);
 CREATE INDEX IF NOT EXISTS rmv_idx_retailers_teamlead_name ON public.rmv_retailers(teamlead_name);
 CREATE INDEX IF NOT EXISTS rmv_idx_retailers_darkstore ON public.rmv_retailers(darkstore);
+CREATE INDEX IF NOT EXISTS rmv_idx_retailers_darkstore_id ON public.rmv_retailers(darkstore_id);
 CREATE INDEX IF NOT EXISTS rmv_idx_retailers_active ON public.rmv_retailers(is_active);
 CREATE INDEX IF NOT EXISTS rmv_idx_retailers_name_search ON public.rmv_retailers USING gin(to_tsvector('english', name || ' ' || COALESCE(trader_name, '')));
 
@@ -238,6 +255,7 @@ GRANT EXECUTE ON FUNCTION public.rmv_get_pincodes_by_radius TO anon, authenticat
 
 CREATE TABLE IF NOT EXISTS public.rmv_darkstore_locations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  darkstore_id INTEGER NOT NULL UNIQUE,
   darkstore VARCHAR(255) NOT NULL UNIQUE,
   address TEXT NOT NULL,
   latitude DECIMAL(10, 8) NOT NULL,
@@ -248,6 +266,7 @@ CREATE TABLE IF NOT EXISTS public.rmv_darkstore_locations (
 );
 
 CREATE INDEX IF NOT EXISTS rmv_idx_darkstore_locations_darkstore ON public.rmv_darkstore_locations(darkstore);
+CREATE UNIQUE INDEX IF NOT EXISTS rmv_idx_darkstore_locations_darkstore_id ON public.rmv_darkstore_locations(darkstore_id);
 CREATE INDEX IF NOT EXISTS rmv_idx_darkstore_locations_geolocation ON public.rmv_darkstore_locations USING GIST(geolocation);
 
 DROP TRIGGER IF EXISTS rmv_trigger_darkstore_update_geolocation ON public.rmv_darkstore_locations;
@@ -284,6 +303,7 @@ CREATE TABLE IF NOT EXISTS public.rmv_tam_retailers (
   location_source TEXT DEFAULT 'auto',
   pincode VARCHAR(10) NOT NULL,
   darkstore VARCHAR(255) NOT NULL,
+  darkstore_id INTEGER NOT NULL,
   user_agent TEXT,
   device_info JSONB,
   created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -292,6 +312,7 @@ CREATE TABLE IF NOT EXISTS public.rmv_tam_retailers (
 );
 
 CREATE INDEX IF NOT EXISTS rmv_idx_tam_retailers_darkstore ON public.rmv_tam_retailers(darkstore);
+CREATE INDEX IF NOT EXISTS rmv_idx_tam_retailers_darkstore_id ON public.rmv_tam_retailers(darkstore_id);
 CREATE INDEX IF NOT EXISTS rmv_idx_tam_retailers_pincode ON public.rmv_tam_retailers(pincode);
 CREATE INDEX IF NOT EXISTS rmv_idx_tam_retailers_geolocation ON public.rmv_tam_retailers USING GIST(geolocation);
 CREATE INDEX IF NOT EXISTS rmv_idx_tam_retailers_created_at ON public.rmv_tam_retailers(created_at DESC);
@@ -387,7 +408,11 @@ async function copySimpleTables(sourceClient, targetClient) {
     'retailers',
     'id,name,address,phone,latitude,longitude,is_active,last_visit_date,next_scheduled_visit,notes,userid,state,city,pincode,last_order_date,sk_id,trader_name,retailer_status,buying_category,teamlead_name,darkstore'
   );
-  await upsertRows(targetClient, 'rmv_retailers', retailers);
+  await upsertRows(
+    targetClient,
+    'rmv_retailers',
+    retailers.map((row) => row.darkstore ? withDarkstoreId(row) : row)
+  );
   }
 
   if (await getCount(TARGET_REF, 'rmv_retailer_categories') === await getCount(SOURCE_REF, 'retailer_categories')) {
@@ -405,7 +430,7 @@ async function copySimpleTables(sourceClient, targetClient) {
     'darkstore_locations',
     'id,darkstore,address,latitude,longitude,created_at,updated_at'
   );
-  await upsertRows(targetClient, 'rmv_darkstore_locations', darkstores);
+  await upsertRows(targetClient, 'rmv_darkstore_locations', darkstores.map(withDarkstoreId));
   }
 
   if (await getCount(TARGET_REF, 'rmv_tam_retailers') === await getCount(SOURCE_REF, 'tam_retailers')) {
@@ -419,7 +444,10 @@ async function copySimpleTables(sourceClient, targetClient) {
   await upsertRows(
     targetClient,
     'rmv_tam_retailers',
-    tamRetailers.map((row) => ({ ...row, shop_photo_url: rewritePhotoUrl(row.shop_photo_url) }))
+    tamRetailers.map((row) => ({
+      ...withDarkstoreId(row),
+      shop_photo_url: rewritePhotoUrl(row.shop_photo_url),
+    }))
   );
   }
 }

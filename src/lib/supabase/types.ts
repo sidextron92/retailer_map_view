@@ -33,6 +33,7 @@ export interface Database {
           trader_name: string | null
           buying_category: string | null
           teamlead_name: string | null
+          darkstore_id: number | null
           darkstore: string | null
           is_active: boolean
           last_visit_date: string | null
@@ -56,6 +57,7 @@ export interface Database {
           trader_name?: string | null
           buying_category?: string | null
           teamlead_name?: string | null
+          darkstore_id?: number | null
           darkstore?: string | null
           is_active?: boolean
           last_visit_date?: string | null
@@ -79,6 +81,7 @@ export interface Database {
           trader_name?: string | null
           buying_category?: string | null
           teamlead_name?: string | null
+          darkstore_id?: number | null
           darkstore?: string | null
           is_active?: boolean
           last_visit_date?: string | null
@@ -141,6 +144,7 @@ export interface Database {
       rmv_darkstore_locations: {
         Row: {
           id: string
+          darkstore_id: number
           darkstore: string
           address: string
           latitude: number
@@ -150,6 +154,7 @@ export interface Database {
         }
         Insert: {
           id?: string
+          darkstore_id: number
           darkstore: string
           address: string
           latitude: number
@@ -159,6 +164,7 @@ export interface Database {
         }
         Update: {
           id?: string
+          darkstore_id?: number
           darkstore?: string
           address?: string
           latitude?: number
@@ -179,6 +185,7 @@ export interface Database {
           location_accuracy: number | null
           location_source: string | null
           pincode: string
+          darkstore_id: number
           darkstore: string
           user_agent: string | null
           device_info: Json | null
@@ -196,6 +203,7 @@ export interface Database {
           location_accuracy?: number | null
           location_source?: string | null
           pincode: string
+          darkstore_id: number
           darkstore: string
           user_agent?: string | null
           device_info?: Json | null
@@ -213,9 +221,39 @@ export interface Database {
           location_accuracy?: number | null
           location_source?: string | null
           pincode?: string
+          darkstore_id?: number
           darkstore?: string
           user_agent?: string | null
           device_info?: Json | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+      }
+      rmv_market_boundaries: {
+        Row: {
+          id: string
+          name: string
+          darkstore_id: number
+          darkstore: string
+          geometry: Json
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          name: string
+          darkstore_id: number
+          darkstore: string
+          geometry: Json
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          name?: string
+          darkstore_id?: number
+          darkstore?: string
+          geometry?: Json
           created_at?: string | null
           updated_at?: string | null
         }
@@ -254,6 +292,31 @@ export interface Database {
           district: string | null
           state: string | null
           geometry: unknown
+        }[]
+      }
+      rmv_get_retailers_in_market: {
+        Args: {
+          p_market_id: string
+          p_darkstore_id: number
+        }
+        Returns: Database['public']['Tables']['rmv_tam_retailers']['Row'][]
+      }
+      rmv_get_normal_retailers_in_market: {
+        Args: {
+          p_market_id: string
+          p_darkstore_id: number
+        }
+        Returns: Database['public']['Tables']['rmv_retailers']['Row'][]
+      }
+      rmv_get_market_data: {
+        Args: {
+          p_darkstore_id: number
+        }
+        Returns: {
+          id: string | null
+          name: string
+          area_sqm: number | null
+          retailer_count: number
         }[]
       }
     }

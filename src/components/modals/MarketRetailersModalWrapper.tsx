@@ -7,7 +7,7 @@ import { useMarketRetailers } from '@/hooks/useMarketRetailers';
 interface MarketRetailersModalWrapperProps {
   marketId: string | null;
   marketName: string;
-  darkstore: string;
+  darkstoreId: number;
   isOpen: boolean;
   onClose: () => void;
   isAdmin?: boolean;
@@ -18,14 +18,14 @@ interface MarketRetailersModalWrapperProps {
 export function MarketRetailersModalWrapper({
   marketId,
   marketName,
-  darkstore,
+  darkstoreId,
   isOpen,
   onClose,
   isAdmin = false,
   onEdit,
   onDelete,
 }: MarketRetailersModalWrapperProps) {
-  const { retailers } = useMarketRetailers(marketId, darkstore);
+  const { retailers } = useMarketRetailers(marketId, darkstoreId);
 
   return (
     <>

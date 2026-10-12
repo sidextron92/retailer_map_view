@@ -61,21 +61,26 @@ function HomeContent() {
   const isAdmin = role === 'admin';
   const viewMode: ViewMode = view === 'markets' ? 'markets' : 'pincode';
 
+  // Resolve the name-based URL parameter once, then use the external ID for data access.
+  const {
+    darkstore,
+    loading: darkstoreLoading,
+    error: darkstoreError,
+  } = useDarkstore(darkstoreParam);
+  const darkstoreId = darkstore?.darkstore_id ?? null;
+
   // Read URL parameters for server-side filtering (retailers)
   const urlFilters = useMemo(() => ({
-    darkstore: darkstoreParam,
+    darkstoreId: darkstoreParam ? darkstoreId : undefined,
     skId: searchParams.get('sk_id'),
     buyingCategory: searchParams.get('buying_category'),
-  }), [darkstoreParam, searchParams]);
+  }), [darkstoreId, darkstoreParam, searchParams]);
 
   // Fetch retailers with server-side filters applied
   const { retailers, loading, error } = useRetailers(urlFilters);
 
-  // Fetch darkstore location if darkstore parameter is present
-  const { darkstore } = useDarkstore(darkstoreParam);
-
   // Fetch TAM retailers if in TAM mode
-  const { retailers: tamRetailers, refresh: refreshTamRetailers } = useTamRetailers(isTamMode ? darkstoreParam : null);
+  const { retailers: tamRetailers, refresh: refreshTamRetailers } = useTamRetailers(isTamMode ? darkstoreId : null);
 
   // Fetch market boundaries scoped to darkstore (used when viewMode is markets)
   const {
@@ -84,7 +89,7 @@ function HomeContent() {
     createMarket,
     updateMarket,
     deleteMarket,
-  } = useMarketBoundaries(darkstoreParam);
+  } = useMarketBoundaries(darkstoreId, darkstore?.darkstore);
 
   const [selectedRetailer, setSelectedRetailer] = useState<Retailer | null>(null);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -352,7 +357,7 @@ function HomeContent() {
   };
 
   // Loading state
-  if (loading) {
+  if (loading || (darkstoreParam && darkstoreLoading)) {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-100">
         <div className="text-center">
@@ -366,14 +371,15 @@ function HomeContent() {
   }
 
   // Error state
-  if (error) {
+  const pageError = error ?? darkstoreError;
+  if (pageError) {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-100">
         <div className="max-w-md rounded-lg bg-white p-8 shadow-lg">
           <h2 className="mb-4 text-xl font-semibold text-red-600">
             Error Loading Data
           </h2>
-          <p className="mb-4 text-gray-700">{error.message}</p>
+          <p className="mb-4 text-gray-700">{pageError.message}</p>
           <div className="rounded-lg bg-yellow-50 p-4">
             <p className="text-sm text-yellow-800">
               <strong>Troubleshooting:</strong>
@@ -674,6 +680,7 @@ function HomeContent() {
             setIsAddRetailerSheetOpen(false);
             setManualLocation(null);
           }}
+          darkstoreId={darkstore.darkstore_id}
           darkstore={darkstore.darkstore}
           userLocation={userLocation}
           manualLocation={manualLocation}
@@ -691,7 +698,7 @@ function HomeContent() {
         <MarketDataSheet
           isOpen={isMarketDataSheetOpen}
           onClose={() => setIsMarketDataSheetOpen(false)}
-          darkstore={darkstore.darkstore}
+          darkstoreId={darkstore.darkstore_id}
           userLocation={userLocation}
           pincodeData={pincodeDataForTam}
           viewMode={viewMode}
@@ -710,7 +717,7 @@ function HomeContent() {
         <MarketRetailersModalWrapper
           marketId={selectedMarketId}
           marketName={selectedMarketName}
-          darkstore={darkstore.darkstore}
+          darkstoreId={darkstore.darkstore_id}
           isOpen={isMarketRetailersModalOpen}
           onClose={() => setIsMarketRetailersModalOpen(false)}
           isAdmin={isAdmin}
@@ -720,12 +727,12 @@ function HomeContent() {
       )}
 
       {/* Market Retailers Modal (normal mode) */}
-      {isNormalMode && darkstoreParam && (
+      {isNormalMode && darkstore && (
         <NormalMarketRetailersModalWrapper
           key={selectedMarketId ?? 'no-market'}
           marketId={selectedMarketId}
           marketName={selectedMarketName}
-          darkstore={darkstoreParam}
+          darkstoreId={darkstore.darkstore_id}
           isOpen={isMarketRetailersModalOpen}
           onClose={() => setIsMarketRetailersModalOpen(false)}
           isAdmin={isAdmin}

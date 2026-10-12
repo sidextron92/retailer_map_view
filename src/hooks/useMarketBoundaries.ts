@@ -17,6 +17,7 @@ function toFeatureCollection(markets: MarketBoundary[]): MarketFeatureCollection
       properties: {
         id: market.id,
         name: market.name,
+        darkstore_id: market.darkstore_id,
         darkstore: market.darkstore,
         fillColor: getMarketFillColor(market.id),
         outlineColor: getMarketOutlineColor(market.id),
@@ -26,14 +27,17 @@ function toFeatureCollection(markets: MarketBoundary[]): MarketFeatureCollection
   };
 }
 
-export function useMarketBoundaries(darkstore: string | null | undefined) {
+export function useMarketBoundaries(
+  darkstoreId: number | null | undefined,
+  darkstoreName: string | null | undefined
+) {
   const [markets, setMarkets] = useState<MarketBoundary[]>([]);
   const [featureCollection, setFeatureCollection] = useState<MarketFeatureCollection | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchMarkets = useCallback(async () => {
-    if (!darkstore) {
+    if (!darkstoreId) {
       setMarkets([]);
       setFeatureCollection(null);
       return;
@@ -46,7 +50,7 @@ export function useMarketBoundaries(darkstore: string | null | undefined) {
       const { data, error: fetchError } = await supabase
         .from('rmv_market_boundaries')
         .select('*')
-        .ilike('darkstore', darkstore)
+        .eq('darkstore_id', darkstoreId)
         .order('created_at', { ascending: false });
 
       if (fetchError) throw fetchError;
@@ -61,20 +65,21 @@ export function useMarketBoundaries(darkstore: string | null | undefined) {
     } finally {
       setLoading(false);
     }
-  }, [darkstore]);
+  }, [darkstoreId]);
 
   useEffect(() => {
     fetchMarkets();
   }, [fetchMarkets]);
 
   const createMarket = useCallback(async (name: string, geometry: Polygon) => {
-    if (!darkstore) throw new Error('Darkstore is required');
+    if (!darkstoreId || !darkstoreName) throw new Error('Darkstore is required');
 
     const { data, error: insertError } = await supabase
       .from('rmv_market_boundaries')
       .insert({
         name,
-        darkstore,
+        darkstore_id: darkstoreId,
+        darkstore: darkstoreName,
         geometry,
       })
       .select()
@@ -84,7 +89,7 @@ export function useMarketBoundaries(darkstore: string | null | undefined) {
 
     await fetchMarkets();
     return data as MarketBoundary;
-  }, [darkstore, fetchMarkets]);
+  }, [darkstoreId, darkstoreName, fetchMarkets]);
 
   const updateMarket = useCallback(async (id: string, updates: { name?: string; geometry?: Polygon }) => {
     const { error: updateError } = await supabase

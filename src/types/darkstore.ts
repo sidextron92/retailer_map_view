@@ -1,5 +1,6 @@
 export interface Darkstore {
   id: string;
+  darkstore_id: number;
   darkstore: string;
   address: string;
   latitude: number;
